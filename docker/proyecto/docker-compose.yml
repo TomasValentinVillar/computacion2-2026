@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  web:
+    build: ./web
+    environment:
+      - REDIS_HOST=redis
+    depends_on:
+      - redis
+    ports:
+      - "8000:8000"
+  worker:
+    build: ./worker
+    environment:
+      - REDIS_HOST=redis
+    depends_on:
+      - redis
+  redis:
+    image: redis:alpine
