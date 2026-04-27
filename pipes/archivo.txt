@@ -1,0 +1,18 @@
+total 56
+drwxrwxr-x 2 tomas tomas 4096 abr 26 21:38 .
+drwxrwxr-x 9 tomas tomas 4096 abr 21 10:28 ..
+-rw-r--r-- 1 tomas tomas    0 abr 26 21:40 archivo.txt
+-rw-rw-r-- 1 tomas tomas 1325 abr 26 12:34 bidireccional.py
+-rw-rw-r-- 1 tomas tomas    0 abr 26 21:38 entrada.txt
+-rw-rw-r-- 1 tomas tomas  941 abr 24 20:25 explorar_fds.py
+-rw-rw-r-- 1 tomas tomas  908 abr 26 18:38 ls-la.py
+-rw-rw-r-- 1 tomas tomas 2187 abr 26 21:38 minish$.py
+-rw-rw-r-- 1 tomas tomas 1629 abr 26 21:16 pipe_3cmd.py
+-rw-rw-r-- 1 tomas tomas 1097 abr 26 12:28 pipe_pabre_hijo.py
+-rw-rw-r-- 1 tomas tomas  618 abr 25 19:23 redireccion.py
+-rw-r--r-- 1 tomas tomas    0 abr 26 21:39 saludo.txt
+-rw-rw-r-- 1 tomas tomas  382 abr 25 19:53 separar_salidas.py
+-rw-rw-r-- 1 tomas tomas   68 abr 25 19:55 solo_stderr.txt
+-rw-rw-r-- 1 tomas tomas   73 abr 25 19:54 solo_stdout.txt
+-rw-rw-r-- 1 tomas tomas   68 abr 25 19:56 stderr.txt
+-rw-rw-r-- 1 tomas tomas   73 abr 25 19:56 stdout.txt
