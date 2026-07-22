@@ -1,5 +1,5 @@
 import os, time
-from parsear_status import parsear_status
+from multiprocessing import Process, Manager
 
 def parsear_stat(pid):
     with open(f"/proc/{pid}/stat") as f:
@@ -12,6 +12,16 @@ def parsear_stat(pid):
     utime = resto[11]
     stime = resto[12]
     return {"pid": pid, "comm": nombre, "estado": estado, "ppid": ppid, "utime": utime, "stime": stime}
+
+def parsear_status(pid):
+    datos = {}
+    with open(f"/proc/{pid}/status") as f:
+        for linea in f:
+            partes = linea.split(":", 1)
+            clave = partes[0].strip()
+            valor = partes[1].strip()
+            datos[clave] = valor
+    return datos
     
 def leer_jiffies_sistema():
     with open("/proc/stat") as f:
@@ -41,7 +51,7 @@ def calcular_cpu(pid, jiffies_ant_proc, jiffies_ant_sist, jiffies_sist_ahora):
     # 4. devolver el cpu% y los valores nuevos para guardar como 'anterior'
     return cpu, jiffies_proc_ahora
 
-def analizador_resumen():
+def analizador_resumen(shared):
     # historial que sobrevive entre vueltas (privado del analizador)
     jiffies_ant_proc = {}
     jiffies_ant_sist = 0
@@ -75,7 +85,7 @@ def analizador_resumen():
             except FileNotFoundError:
                 continue
 
-
+        shared["resumen"] = resultado
 
         # (D) el resultado nuevo pasa a ser lo que se muestra
         # (E) actualizar historial: lo de ahora es el "anterior" de la próxima
@@ -92,4 +102,10 @@ def analizador_resumen():
         time.sleep(2)
 
 if __name__ == "__main__":
-    analizador_resumen()
+    manager = Manager()
+    shared = manager.dict()
+
+    p = Process(target=analizador_resumen, args=(shared,))   # le paso el dict al hijo
+    p.start()
+    time.sleep(5)                                    # dejá que el hijo trabaje
+    print("\n>>> EL PADRE VE:", len(shared["resumen"]), "procesos")
