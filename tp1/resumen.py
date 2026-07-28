@@ -1,5 +1,13 @@
 import os, time
 from multiprocessing import Process, Manager
+import signal
+
+# la bandera, visible para el handler y para el loop
+cerrar = False
+
+def manejador(signum, frame):
+    global cerrar
+    cerrar = True          # ← lo ÚNICO que hace el handler: levantar la bandera
 
 def parsear_stat(pid):
     with open(f"/proc/{pid}/stat") as f:
@@ -52,11 +60,13 @@ def calcular_cpu(pid, jiffies_ant_proc, jiffies_ant_sist, jiffies_sist_ahora):
     return cpu, jiffies_proc_ahora
 
 def analizador_resumen(shared):
-    # historial que sobrevive entre vueltas (privado del analizador)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
     jiffies_ant_proc = {}
     jiffies_ant_sist = 0
 
-    while True:
+    while shared["seguir"]:
+
+
         # (A) leer jiffies del sistema UNA vez por vuelta
         jiffies_sist_ahora = leer_jiffies_sistema()
 
@@ -102,10 +112,20 @@ def analizador_resumen(shared):
         time.sleep(2)
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGINT, manejador)
+    signal.signal(signal.SIGTERM, manejador)
+
     manager = Manager()
     shared = manager.dict()
+    shared["seguir"] = True          # ← la bandera arranca en True
 
-    p = Process(target=analizador_resumen, args=(shared,))   # le paso el dict al hijo
+    p = Process(target=analizador_resumen, args=(shared,))
     p.start()
-    time.sleep(5)                                    # dejá que el hijo trabaje
-    print("\n>>> EL PADRE VE:", len(shared["resumen"]), "procesos")
+
+    while not cerrar:
+        time.sleep(0.5)
+
+    print("\ncerrando...")
+    shared["seguir"] = False         # ← le pedís al hijo que pare
+    p.join()                         # ← ahora el hijo SÍ va a terminar
+    print("cerrado limpio")
