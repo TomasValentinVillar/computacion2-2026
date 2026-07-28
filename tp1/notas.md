@@ -67,3 +67,11 @@ hace while shared["seguir"] y revisa cada vuelta; el padre baja la bandera y hac
 join(). El hijo termina su vuelta actual y sale en un punto seguro.
 Trade-off: el cierre puede tardar hasta un intervalo (el hijo termina su sleep),
 pero muere ordenado en vez de a la mitad de una operación.
+
+## Estructura de archivos
+- procfs.py: helpers de parseo de /proc compartidos por todos los analizadores.
+- resumen.py: el analizador de resumen (el hijo). No lanza procesos ni crea Manager.
+- main.py: orquestador (el padre). Crea el Manager, lanza los procesos, maneja
+  señales (SIGINT/SIGTERM) y el cierre ordenado.
+Imports planos porque el entry point (main.py) se ejecuta desde src/, donde están
+los tres. La subcarpeta analizadores/ queda pendiente para cuando haya varios.
