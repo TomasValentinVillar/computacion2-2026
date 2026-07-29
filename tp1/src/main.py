@@ -1,13 +1,14 @@
 import signal
-from multiprocessing import Process, Manager
 import time
+from multiprocessing import Process, Manager
 from analizadores.resumen import analizador_resumen
+from analizadores.memoria import analizador_memoria
 
 cerrar = False
 
 def manejador(signum, frame):
     global cerrar
-    cerrar = True          # ← lo ÚNICO que hace el handler: levantar la bandera}
+    cerrar = True
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, manejador)
@@ -15,15 +16,28 @@ if __name__ == "__main__":
 
     manager = Manager()
     shared = manager.dict()
-    shared["seguir"] = True          # ← la bandera arranca en True
+    shared["seguir"] = True
 
-    p = Process(target=analizador_resumen, args=(shared,))
-    p.start()
+    # lista de procesos (escalable: mañana agregás más analizadores acá)
+    procesos = [
+        #Process(target=analizador_resumen, args=(shared,)),
+        Process(target=analizador_memoria, args=(shared,)),
+    ]
 
+    # lanzar TODOS
+    for p in procesos:
+        p.start()
+
+    # esperar la señal
     while not cerrar:
         time.sleep(0.5)
+        #if "resumen" in shared and "memoria" in shared:
+        #    print(f">>> resumen: {len(shared['resumen'])} procs | memoria: {len(shared['memoria'])} procs")
 
+
+    # cierre ordenado
     print("\ncerrando...")
-    shared["seguir"] = False         # ← le pedís al hijo que pare
-    p.join()                         # ← ahora el hijo SÍ va a terminar
+    shared["seguir"] = False
+    for p in procesos:      # esperar TODOS
+        p.join()
     print("cerrado limpio")

@@ -39,7 +39,7 @@ def analizador_resumen(shared):
                     'Uid': status['Uid']
                 }
                 nuevos_jiffies_proc[pid] = jiffies_proc_ahora
-            except FileNotFoundError:
+            except (FileNotFoundError, PermissionError, ProcessLookupError):
                 continue
 
         shared["resumen"] = resultado
@@ -50,11 +50,11 @@ def analizador_resumen(shared):
         jiffies_ant_sist = jiffies_sist_ahora
 
         # (D) mostrar resultados (temporal, para probar)
-        print("\n" + "="*60)
+        '''print("\n" + "="*60)
         print(f"{'PID':>7} {'CPU%':>6} {'THR':>4} {'ST':>2}  COMANDO")
         for pid, info in sorted(resultado.items(), key=lambda x: x[1]['cpu'], reverse=True)[:10]:
             print(f"{pid:>7} {info['cpu']:>6.1f} {info['Threads']:>4} {info['estado']:>2}  {info['comm']}")
-
+'''
         # (F) dormir el intervalo
         time.sleep(2)
 

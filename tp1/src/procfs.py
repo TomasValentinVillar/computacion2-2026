@@ -19,9 +19,11 @@ def parsear_stat(pid):
     resto = linea[linea.rfind(')')+1:].split()
     estado = resto[0]
     ppid = resto[1]
+    minflt = resto[7]
+    majflt = resto[9]
     utime = resto[11]
     stime = resto[12]
-    return {"pid": pid, "comm": nombre, "estado": estado, "ppid": ppid,
+    return {"pid": pid, "comm": nombre, "estado": estado, "ppid": ppid,"minflt": minflt, "majflt": majflt,
             "utime": utime, "stime": stime}
 
 
@@ -64,3 +66,31 @@ def calcular_cpu(pid, jiffies_ant_proc, jiffies_ant_sist, jiffies_sist_ahora):
             cpu = (delta_proc / delta_sist) * 100
 
     return cpu, jiffies_proc_ahora
+
+def parsear_maps(pid):
+    '''Parsea /proc/<pid>/maps y devuelve un dict con los tamaños de cada grupo de memoria:'''
+    grupos = {"text": 0, "data": 0, "heap": 0, "stack": 0, "shared": 0}
+    with open(f"/proc/{pid}/maps") as f:
+        for linea in f:
+            partes = linea.split()
+            rango = partes[0]                          # "inicio-fin"
+            permisos = partes[1]                       # "r-xp"
+            etiqueta = partes[5] if len(partes) > 5 else ''
+
+            inicio, fin = rango.split("-")
+            tamano = int(fin, 16) - int(inicio, 16)
+
+            # clasificar (de lo más específico a lo más general):
+            if etiqueta == "[heap]":
+                grupos["heap"] += tamano
+            elif etiqueta == "[stack]":
+                grupos["stack"] += tamano
+            elif "x" in permisos:
+                grupos["text"] += tamano
+            elif "s" in permisos:
+                grupos["shared"] += tamano
+            elif "w" in permisos:
+                grupos["data"] += tamano
+            # el resto (read-only) lo ignoramos por ahora
+
+    return grupos
