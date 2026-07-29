@@ -3,6 +3,7 @@ import time
 from multiprocessing import Process, Manager
 from analizadores.resumen import analizador_resumen
 from analizadores.memoria import analizador_memoria
+from analizadores.señales import analizador_senales
 
 cerrar = False
 
@@ -20,8 +21,9 @@ if __name__ == "__main__":
 
     # lista de procesos (escalable: mañana agregás más analizadores acá)
     procesos = [
-        #Process(target=analizador_resumen, args=(shared,)),
+        Process(target=analizador_resumen, args=(shared,)),
         Process(target=analizador_memoria, args=(shared,)),
+        Process(target=analizador_senales, args=(shared,))
     ]
 
     # lanzar TODOS

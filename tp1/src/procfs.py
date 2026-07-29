@@ -6,6 +6,7 @@ por eso viven acá y no dentro de un analizador puntual.
 """
 
 import os
+import signal
 
 
 def parsear_stat(pid):
@@ -94,3 +95,16 @@ def parsear_maps(pid):
             # el resto (read-only) lo ignoramos por ahora
 
     return grupos
+
+    import signal
+
+def decodificar_senales(mascara_hex):
+    numero = int(mascara_hex, 16)
+    señales = []
+    for n in range(1, 65):
+        if numero & (1 << (n - 1)):
+            try:
+                señales.append(signal.Signals(n).name)
+            except ValueError:
+                señales.append(f"SIG{n}")    # nombre genérico si no es válida
+    return señales
