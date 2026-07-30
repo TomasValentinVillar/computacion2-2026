@@ -7,6 +7,7 @@ from analizadores.señales import analizador_senales
 from analizadores.fds import analizador_fds
 from analizadores.threads import analizador_threads
 from analizadores.scheduling import analizador_scheduling
+from analizadores.sistema import analizador_sistema
 
 cerrar = False
 
@@ -29,7 +30,8 @@ if __name__ == "__main__":
         #Process(target=analizador_senales, args=(shared,)),
         #Process(target=analizador_fds, args=(shared,)),
         #Process(target=analizador_threads, args=(shared,)),
-        Process(target=analizador_scheduling, args=(shared,))
+        #Process(target=analizador_scheduling, args=(shared,)),
+        Process(target=analizador_sistema, args=(shared,)),
     ]
 
     # lanzar TODOS

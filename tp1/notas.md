@@ -162,3 +162,13 @@ convención (100% = 1 núcleo). Verificado con while True: da 12.5% estable.
   list() porque los set no son serializables a JSON.
 - OJO parseo: la fórmula indice=campo-3 vale, pero verificar SIEMPRE contra un campo
   con valor distintivo (no 0), porque dos ceros "coinciden" falsamente.
+
+  ## Vista sistema (global)
+A diferencia de los otros 6 (por proceso), este es GLOBAL: una sola foto, dict
+PLANO {campo: valor}, sin loop de PIDs.
+- /proc/uptime: segundos encendida (primer número). Convertir con // y % a h/m/s.
+- /proc/meminfo (formato clave: valor kB como status): MemTotal, MemFree,
+  MemAvailable (la que importa: libre + cachés liberables).
+- /proc/loadavg: load a 1/5/15 min = promedio de procesos corriendo/esperando CPU.
+  Comparar con nro de núcleos (load < núcleos = holgado). Si 1min > 15min = carga
+  subiendo; si 1min < 15min = bajando.
