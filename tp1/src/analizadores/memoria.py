@@ -41,8 +41,8 @@ def analizador_memoria(shared):
                 continue
 
         #print(f"TOTAL procesos parseados: {len(resultado)}")
-        print(f"{'PID':>7} {'VmRSS':>10} {'text':>10} {'data':>10} {'heap':>10} {'stack':>10} {'shared':>10}")
+        '''print(f"{'PID':>7} {'VmRSS':>10} {'text':>10} {'data':>10} {'heap':>10} {'stack':>10} {'shared':>10}")
         for pid, info in sorted(resultado.items(), key=lambda x: int(x[1]['VmRSS'].split()[0]), reverse=True)[:10]:
-            print(f"{pid:>7} {info['VmRSS']:>10} {info['text']:>10} {info['data']:>10} {info['heap']:>10} {info['stack']:>10} {info['shared']:>10}")
+            print(f"{pid:>7} {info['VmRSS']:>10} {info['text']:>10} {info['data']:>10} {info['heap']:>10} {info['stack']:>10} {info['shared']:>10}")'''
         shared["memoria"] = resultado
         time.sleep(2)

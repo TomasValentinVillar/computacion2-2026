@@ -26,7 +26,7 @@ def analizador_fds(shared):
             except (FileNotFoundError, PermissionError, ProcessLookupError):
                 continue
 
-        print("\n" + "="*70)
+        '''print("\n" + "="*70)
         print(f"{'PID':>7} {'#FDs':>5} {'Tipos de FDs'}")
         for pid, info in sorted(resultado.items(), key=lambda x: int(x[0]))[:15]:
             tipos = {}
@@ -34,6 +34,6 @@ def analizador_fds(shared):
                 tipo = fd_data['tipo']
                 tipos[tipo] = tipos.get(tipo, 0) + 1
             tipos_str = ", ".join(f"{k}:{v}" for k, v in tipos.items())
-            print(f"{pid:>7} {len(info):>5} {tipos_str}")
+            print(f"{pid:>7} {len(info):>5} {tipos_str}")'''
         shared["fds"] = resultado
         time.sleep(2)

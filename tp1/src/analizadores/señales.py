@@ -20,10 +20,10 @@ def analizador_senales(shared):
                 }
             except (FileNotFoundError, PermissionError, ProcessLookupError):
                 continue
-        print("\n" + "="*70)
+        '''print("\n" + "="*70)
         print(f"{'PID':>7} {'#Blk':>5} {'#Ign':>5} {'#Cgt':>5} {'#Pnd':>5}  SigCgt (con handler)")
         for pid, info in sorted(resultado.items(), key=lambda x: int(x[0]))[:15]:
             cgt = ", ".join(info['SigCgt'][:5])          # solo las primeras 5 para que entre
-            print(f"{pid:>7} {len(info['SigBlk']):>5} {len(info['SigIgn']):>5} {len(info['SigCgt']):>5} {len(info['SigPnd']):>5}  {cgt}")
+            print(f"{pid:>7} {len(info['SigBlk']):>5} {len(info['SigIgn']):>5} {len(info['SigCgt']):>5} {len(info['SigPnd']):>5}  {cgt}")'''
         shared["senales"] = resultado
         time.sleep(2)

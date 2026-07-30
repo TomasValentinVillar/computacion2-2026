@@ -58,7 +58,7 @@ def analizador_threads(shared):
         jiffies_ant_sist = jiffies_sist_ahora
 
         # --- print temporal para verificar ---
-        print("\n" + "="*60)
+        '''print("\n" + "="*60)
         print(f"{'PID':>7} {'#THR':>5} {'maxCPU':>7}  THREADS (tid:nombre:cpu%)")
 
         def max_cpu(info):
@@ -70,7 +70,7 @@ def analizador_threads(shared):
         for pid, info in sorted(resultado.items(), key=lambda x: max_cpu(x[1]), reverse=True)[:8]:
             muestra = list(info['threads'].items())[:4]
             threads_str = ", ".join(f"{tid}:{d['comm']}:{d['cpu']:.1f}" for tid, d in muestra)
-            print(f"{pid:>7} {info['num_threads']:>5} {max_cpu(info):>7.1f}  {threads_str}")
+            print(f"{pid:>7} {info['num_threads']:>5} {max_cpu(info):>7.1f}  {threads_str}")'''
 
         shared["threads"] = resultado
         time.sleep(2)

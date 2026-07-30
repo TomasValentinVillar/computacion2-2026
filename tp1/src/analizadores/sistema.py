@@ -40,7 +40,7 @@ def analizador_sistema(shared):
         m = (segundos % 3600) // 60
         s = segundos % 60
 
-        print("\n" + "=" * 50)
+        '''print("\n" + "=" * 50)
         print("           ESTADO DEL SISTEMA")
         print("=" * 50)
         print(f"  Uptime      : {h}h {m}m {s}s")
@@ -48,6 +48,6 @@ def analizador_sistema(shared):
         print(f"  RAM libre   : {resultado['mem_free']}")
         print(f"  RAM disp.   : {resultado['mem_disponible']}")
         print(f"  Load (1/5/15): {resultado['load_1min']} / "
-              f"{resultado['load_5min']} / {resultado['load_15min']}")
+              f"{resultado['load_5min']} / {resultado['load_15min']}")'''
 
         time.sleep(2)

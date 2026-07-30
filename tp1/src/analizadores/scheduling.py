@@ -36,8 +36,8 @@ def analizador_scheduling(shared):
                 continue
 
         shared["scheduling"] = resultado
-        print("\n" + "="*60)
+        '''print("\n" + "="*60)
         print(f"{'PID':>7} {'PRIO':>5} {'NICE':>5} {'POLICY':>10} {'VOLUNTARY':>10} {'NONVOLUNTARY':>15} {'PGID':>7} {'SID':>7} {'AFFINITY':>20}")
         for pid, info in sorted(resultado.items(), key=lambda x: (int(x[1]['priority']), int(x[1]['nice'])), reverse=True)[:10]:
-            print(f"{pid:>7} {info['priority']:>5} {info['nice']:>5} {info['policy']:>10} {info['voluntary_ctxt_switches']:>10} {info['nonvoluntary_ctxt_switches']:>15} {info['pgid']:>7} {info['sid']:>7} {str(info['affinity']):>20}")
+            print(f"{pid:>7} {info['priority']:>5} {info['nice']:>5} {info['policy']:>10} {info['voluntary_ctxt_switches']:>10} {info['nonvoluntary_ctxt_switches']:>15} {info['pgid']:>7} {info['sid']:>7} {str(info['affinity']):>20}")'''
         time.sleep(2)

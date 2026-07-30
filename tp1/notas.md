@@ -172,3 +172,15 @@ PLANO {campo: valor}, sin loop de PIDs.
 - /proc/loadavg: load a 1/5/15 min = promedio de procesos corriendo/esperando CPU.
   Comparar con nro de núcleos (load < núcleos = holgado). Si 1min > 15min = carga
   subiendo; si 1min < 15min = bajando.
+
+  ## Display (TUI con curses)
+El display es un proceso más, recibe shared por args, lee (no escribe).
+Ignora SIGINT (lo maneja main), igual que los analizadores.
+curses.wrapper(): entra a modo curses y RESTAURA la terminal al salir (aun con error).
+curs_set(0): oculta cursor. timeout(200): getch espera 200ms y sigue -> refresca
+sola sin quemar CPU (evita busy-wait) y sigue respondiendo al teclado.
+Ciclo por vuelta: erase() -> dibujar -> refresh().
+Evitar crash: getmaxyx() da alto/ancho; cortar filas con if fila >= alto-1: break,
+y recortar texto con linea[:ancho-1]. Dibujar fuera de pantalla crashea curses.
+shared.get("resumen", {}) con default para el arranque (analizador aun sin publicar).
+Los analizadores YA NO imprimen: solo publican. El display es el unico que dibuja.
