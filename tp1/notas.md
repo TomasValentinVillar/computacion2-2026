@@ -75,3 +75,90 @@ pero muere ordenado en vez de a la mitad de una operación.
   señales (SIGINT/SIGTERM) y el cierre ordenado.
 Imports planos porque el entry point (main.py) se ejecuta desde src/, donde están
 los tres. La subcarpeta analizadores/ queda pendiente para cuando haya varios.
+
+## Memoria virtual (vista memoria)
+VmSize = espacio de direcciones reservado/prometido (puede ser >> RAM física;
+un navegador reserva ~1.2 TB virtuales). VmRSS = memoria realmente en RAM
+(~419 MB). Para "cuánta RAM come de verdad" se usa VmRSS, no VmSize.
+Los procesos de kernel (kthreads) no tienen campos Vm*: se usa .get(clave, '0 kB')
+para no romper con KeyError.
+
+## Orquestación multiproceso
+main.py guarda los procesos en una LISTA. Patrón: for start() (lanzar todos),
+luego for join() (esperar todos). Escalable: agregar un analizador = una línea
+más en la lista, sin tocar la lógica.
+
+## Page faults (vista memoria)
+minor fault = página pedida ya estaba en RAM (caché, COW, lib ya cargada) -> rápido.
+major fault = hay que traerla del DISCO (swap, ejecutable no cargado) -> lento.
+Muchos major faults = proceso yendo a disco = señal de poca RAM/swapping.
+Vienen de /proc/<pid>/stat campos 10 (minflt) y 12 (majflt). Contadores acumulados.
+
+## Segmentos de /proc/<pid>/maps
+Cada línea = una región de memoria virtual: rango (hex), permisos (r/w/x/p/s), etiqueta.
+Clasificación por permisos y etiqueta, de lo específico a lo general:
+[heap]/[stack] por etiqueta; luego 'x'->text (código), 's'->shared, 'w'->data.
+El orden importa: heap/stack antes que permisos (heap es rw-p, caería en data);
+'x' antes que 'w' (una región rwx es código, la x manda).
+Tamaño de región = int(fin,16) - int(inicio,16) (direcciones en hexadecimal).
+
+## Dockerfile actualizado
+CMD pasó de smoke_test.py a main.py. COPY src/ ./src/ + WORKDIR /app/src para
+que los imports funcionen parados en src/.
+
+## Vista señales - decodificar máscaras de bits
+SigBlk/SigIgn/SigCgt/SigPnd en /proc/<pid>/status son máscaras hex de 64 bits:
+cada bit = una señal. Bit N-1 prendido = señal N está en el conjunto (ojo el
+desfasaje: señales desde 1, bits desde 0).
+Se lee un bit con AND: numero & (1 << (n-1)). El (1<<k) fabrica una máscara con
+solo el bit k prendido; el & da distinto de cero si ese bit estaba en 1.
+signal.Signals(n).name traduce número->nombre (try/except para números inválidos).
+SIGKILL(9) y SIGSTOP(19) nunca se pueden bloquear/ignorar/capturar (imparables).
+Los kthreads ignoran las 64; systemd captura varias con handlers propios.
+
+## Vista FDs (file descriptors)
+Un FD es un número que el kernel da por cada recurso abierto (archivo, socket,
+pipe, terminal). 0=stdin, 1=stdout, 2=stderr siempre; de 3 en adelante los que
+abre el proceso.
+En /proc/<pid>/fd/ cada FD es un symlink; os.readlink() da su destino.
+Tipo inferido por el prefijo del destino (startswith): socket:->socket,
+pipe:->pipe, /dev/pts o /dev/tty ->tty, / ->file, resto->otro.
+Orden: tty antes que file (/dev/pts también empieza con /).
+Requiere privileged para leer FDs de procesos ajenos (igual que el maps).
+
+## Vista threads (LWPs)
+Los threads de un proceso viven en /proc/<pid>/task/<tid>/, cada uno con su
+propio stat, status, comm (misma estructura que un proceso).
+El thread principal tiene TID == PID. En Linux el PID es también el TGID
+(Thread Group ID): todos los threads comparten TGID, cada uno tiene su TID único.
+parsear_stat(pid, tid=None) reusa la misma función: sin tid abre /proc/<pid>/stat,
+con tid abre /proc/<pid>/task/<tid>/stat. tid=None por defecto -> no rompe las
+llamadas viejas.
+Loop anidado: por cada pid, recorrer sus tids. Doble try/except (proceso y thread).
+PENDIENTE: CPU% por thread (delta de jiffies por TID).
+
+CPU% por thread: mismo mecanismo que el de procesos (delta de jiffies), pero
+por cada TID. Clave del historial: f"{pid}:{tid}" (no solo tid, porque los TIDs
+se reciclan y podrían colisionar en el tiempo con otro proceso).
+Verificado: un proceso CPU-bound (while True) muestra su thread al ~100%;
+la mayoría de threads dan 0% porque están dormidos (estado S), no es un bug.
+Convención CPU%: 100% = todos los núcleos (delta_sistema suma los 8 cores).
+Por eso un thread saturando 1 núcleo da 12.5% (1/8), no 100%. htop usa la otra
+convención (100% = 1 núcleo). Verificado con while True: da 12.5% estable.
+
+## Vista scheduling
+- nice (-20 a +19, campo 19 stat): amabilidad. nice alto = cede CPU = menos prioridad.
+  Por defecto 0 (heredado). Bajar el nice (más prioridad) requiere root.
+- priority (campo 18 stat): representación interna del kernel = nice + 20 (0 a 39).
+  Menor priority = MAYOR prioridad real.
+- policy (campo 41 stat -> indice 38 en resto, NO 28): 0=OTHER (normal, respeta nice),
+  1=FIFO / 2=RR (real-time, le ganan a todo lo normal). Real-time requiere privilegios
+  porque un FIFO con bug puede secuestrar el sistema entero.
+- context switches (status): voluntary = el proceso cede la CPU (espera I/O);
+  nonvoluntary = el kernel se la arranca (se acabó su turno). CPU-bound -> muchos
+  nonvoluntary; I/O-bound -> muchos voluntary.
+- PGID/SID (campos 5/6 stat): jerarquía sesión > grupo > proceso.
+- affinity: os.sched_getaffinity(pid) -> núcleos donde puede correr. Se convierte a
+  list() porque los set no son serializables a JSON.
+- OJO parseo: la fórmula indice=campo-3 vale, pero verificar SIEMPRE contra un campo
+  con valor distintivo (no 0), porque dos ceros "coinciden" falsamente.

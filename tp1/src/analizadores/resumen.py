@@ -1,5 +1,4 @@
 import os, time
-from multiprocessing import Process, Manager
 import signal
 
 from procfs import parsear_stat, parsear_status, leer_jiffies_sistema, calcular_cpu

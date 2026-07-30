@@ -28,8 +28,14 @@ def parsear_stat(pid,tid=None):
     majflt = resto[9]
     utime = resto[11]
     stime = resto[12]
+    priority = resto[15]
+    nice = resto[16]
+    policy = resto[38]
+    pgid = resto[2]
+    sid = resto[3]
+
     return {"pid": pid, "comm": nombre, "estado": estado, "ppid": ppid,"minflt": minflt, "majflt": majflt,
-            "utime": utime, "stime": stime}
+            "utime": utime, "stime": stime, "priority": priority, "nice": nice, "policy": policy, "pgid": pgid, "sid": sid}
 
 
 def parsear_status(pid):

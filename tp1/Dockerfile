@@ -6,10 +6,10 @@ FROM python:3.11-slim
 #    Si no existe, Docker la crea.
 WORKDIR /app
 
-# 3. Copiamos nuestro archivo desde la maquina (izquierda) a la imagen (derecha).
-#    El "." destino significa "la carpeta actual", que es /app por el WORKDIR.
-COPY smoke_test.py .
+#copiamos toda la carpeta src/ del proyecto a la imagen
+COPY src/ ./src/
+WORKDIR /app/src
 
 # 4. Comando que se ejecuta cuando el contenedor arranca.
 #    Cada palabra va como elemento de una lista (forma recomendada).
-CMD ["python", "smoke_test.py"]
+CMD ["python", "main.py"]

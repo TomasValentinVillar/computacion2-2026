@@ -6,6 +6,7 @@ from analizadores.memoria import analizador_memoria
 from analizadores.señales import analizador_senales
 from analizadores.fds import analizador_fds
 from analizadores.threads import analizador_threads
+from analizadores.scheduling import analizador_scheduling
 
 cerrar = False
 
@@ -23,11 +24,12 @@ if __name__ == "__main__":
 
     # lista de procesos (escalable: mañana agregás más analizadores acá)
     procesos = [
-        Process(target=analizador_resumen, args=(shared,)),
-        Process(target=analizador_memoria, args=(shared,)),
-        Process(target=analizador_senales, args=(shared,)),
-        Process(target=analizador_fds, args=(shared,)),
-        Process(target=analizador_threads, args=(shared,))
+        #Process(target=analizador_resumen, args=(shared,)),
+        #Process(target=analizador_memoria, args=(shared,)),
+        #Process(target=analizador_senales, args=(shared,)),
+        #Process(target=analizador_fds, args=(shared,)),
+        #Process(target=analizador_threads, args=(shared,)),
+        Process(target=analizador_scheduling, args=(shared,))
     ]
 
     # lanzar TODOS
