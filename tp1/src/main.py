@@ -4,6 +4,8 @@ from multiprocessing import Process, Manager
 from analizadores.resumen import analizador_resumen
 from analizadores.memoria import analizador_memoria
 from analizadores.señales import analizador_senales
+from analizadores.fds import analizador_fds
+from analizadores.threads import analizador_threads
 
 cerrar = False
 
@@ -23,7 +25,9 @@ if __name__ == "__main__":
     procesos = [
         Process(target=analizador_resumen, args=(shared,)),
         Process(target=analizador_memoria, args=(shared,)),
-        Process(target=analizador_senales, args=(shared,))
+        Process(target=analizador_senales, args=(shared,)),
+        Process(target=analizador_fds, args=(shared,)),
+        Process(target=analizador_threads, args=(shared,))
     ]
 
     # lanzar TODOS

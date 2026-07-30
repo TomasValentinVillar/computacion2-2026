@@ -9,11 +9,15 @@ import os
 import signal
 
 
-def parsear_stat(pid):
+def parsear_stat(pid,tid=None):
     """Parsea /proc/<pid>/stat. Devuelve dict con pid, comm, estado, ppid, utime, stime.
     Ojo: el campo comm (nombre) va entre paréntesis y puede tener espacios/paréntesis,
     por eso se corta la línea en 3 con rfind(')') en vez de split() directo."""
-    with open(f"/proc/{pid}/stat") as f:
+    if tid is None:
+        ruta = f"/proc/{pid}/stat"
+    else:
+        ruta = f"/proc/{pid}/task/{tid}/stat"
+    with open(ruta) as f:
         linea = f.read()
     pid = linea[:linea.find('(')].strip()
     nombre = linea[linea.find('(')+1 : linea.rfind(')')]
@@ -108,3 +112,15 @@ def decodificar_senales(mascara_hex):
             except ValueError:
                 señales.append(f"SIG{n}")    # nombre genérico si no es válida
     return señales
+
+def tipo_fd(destino):
+    if destino.startswith("socket:"):
+        return "socket"
+    elif destino.startswith("pipe:"):
+        return "pipe"
+    elif destino.startswith("/dev/pts") or destino.startswith("/dev/tty"):
+        return "tty"
+    elif destino.startswith("/"):
+        return "file"
+    else:
+        return "otro"
