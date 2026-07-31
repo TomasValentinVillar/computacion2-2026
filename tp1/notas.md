@@ -184,3 +184,32 @@ Evitar crash: getmaxyx() da alto/ancho; cortar filas con if fila >= alto-1: brea
 y recortar texto con linea[:ancho-1]. Dibujar fuera de pantalla crashea curses.
 shared.get("resumen", {}) con default para el arranque (analizador aun sin publicar).
 Los analizadores YA NO imprimen: solo publican. El display es el unico que dibuja.
+
+## TUI - 7 vistas completas
+Una función dibujar_X por vista (separacion: analizadores publican, display dibuja).
+Diccionario VISTAS {tecla: (nombre, clave)} para el cambio de vista (evita if/elif gigante).
+Cada ficha lleva su propio comm -> cada vista es autosuficiente, el display NO toca /proc.
+Vista sistema es distinta: global, dict plano, lineas fijas con formato (no tabla de procesos).
+Patrones usados: .items() (clave+valor), ", ".join(...) (lista->string),
+dict.get(k,0)+1 (contador), [:N] (muestra/limite), formato con //,% y kB->MB.
+
+## Navegación (flechas + scroll)
+seleccion = índice del proceso resaltado; offset = índice desde el que se dibuja.
+keypad(True) para detectar KEY_UP/KEY_DOWN.
+Límites estilo htop (frena en los extremos): encajar seleccion en [0, cantidad-1].
+Scroll: si seleccion < offset -> offset baja; si seleccion >= offset+filas_visibles
+-> offset sube. La ventana persigue a la selección.
+Al dibujar: slice procesos[offset : offset+filas_visibles], y el resaltado usa
+indice_real = offset + i (el i del enumerate es dentro de la tajada, no global).
+curses.A_REVERSE resalta la fila seleccionada. Sistema no navega (es global).
+
+## Pin + panel de detalle
+pin_pid guarda el PID pineado (el PID, no el indice: el indice cambia al reordenarse).
+Enter pinea el proceso seleccionado / despinea si ya habia.
+ordenar_vista(vista, datos): fuente UNICA del orden, la usan el dibujo Y el Enter,
+asi el indice 'seleccion' apunta al mismo PID en los dos lados.
+Con pin: la lista usa la mitad de arriba (filas_visibles = alto//2 - 3), el panel
+va desde alto//2. Sin pin: lista usa toda la pantalla.
+dibujar_detalle junta info del PID desde varias vistas del shared (resumen+memoria+
+scheduling) con doble .get() - NO toca /proc. Guarda: si el PID ya no esta (murio),
+muestra "no disponible" en vez de crashear.
