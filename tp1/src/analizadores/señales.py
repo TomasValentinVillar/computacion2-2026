@@ -1,5 +1,5 @@
 import os, time, signal
-from procfs import parsear_status, decodificar_senales
+from procfs import parsear_status, decodificar_senales, parsear_stat
 
 def analizador_senales(shared):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -12,11 +12,13 @@ def analizador_senales(shared):
         for pid in pids:
             try:
                 status = parsear_status(pid)
+                stat = parsear_stat(pid)
                 resultado[pid] = {
                     'SigBlk': decodificar_senales(status.get('SigBlk', '0')),
                     'SigIgn': decodificar_senales(status.get('SigIgn', '0')),
                     'SigCgt': decodificar_senales(status.get('SigCgt', '0')),
                     'SigPnd': decodificar_senales(status.get('SigPnd', '0')),
+                    'comm' : stat['comm']
                 }
             except (FileNotFoundError, PermissionError, ProcessLookupError):
                 continue

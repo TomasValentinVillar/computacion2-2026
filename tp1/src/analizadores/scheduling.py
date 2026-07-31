@@ -30,7 +30,8 @@ def analizador_scheduling(shared):
                     'nonvoluntary_ctxt_switches': status['nonvoluntary_ctxt_switches'],
                     'pgid': stat['pgid'],
                     'sid': stat['sid'],
-                    'affinity': list(os.sched_getaffinity(int(pid)))
+                    'affinity': list(os.sched_getaffinity(int(pid))),
+                    'comm': stat['comm']
                 }
             except (FileNotFoundError, PermissionError, ProcessLookupError):
                 continue

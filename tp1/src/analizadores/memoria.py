@@ -35,7 +35,8 @@ def analizador_memoria(shared):
                     'data': maps['data'],
                     'heap': maps['heap'],
                     'stack': maps['stack'],
-                    'shared': maps['shared']
+                    'shared': maps['shared'],
+                    'comm': stat['comm']
                 }
             except (FileNotFoundError, PermissionError, ProcessLookupError):
                 continue
