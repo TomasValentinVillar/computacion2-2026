@@ -368,6 +368,55 @@ def dibujar_placeholder(stdscr, datos, alto, ancho, nombre):
     stdscr.addstr(3, 0, f"Vista '{nombre}' - en construccion")
     stdscr.addstr(5, 0, f"(datos disponibles: {len(datos)} procesos)")
 
+
+def dibujar_ayuda(stdscr, alto, ancho, offset_ayuda):
+    lineas = [
+        "AYUDA - MONITOR DE PROCESOS",
+        "",
+        "VISTAS:",
+        "  1 / r        Resumen",
+        "  2 / m        Memoria",
+        "  3 / s        Senales",
+        "  4 / f        File descriptors",
+        "  5 / t        Threads",
+        "  6 / p        Scheduling",
+        "  7 / g        Sistema (global)",
+        "",
+        "NAVEGACION:",
+        "  flechas      Mover seleccion arriba/abajo",
+        "  Enter        Pin: fijar proceso y ver detalle (Enter de nuevo despina)",
+        "",
+        "FILTROS Y ORDEN:",
+        "  /            Filtrar por nombre",
+        "  u            Filtrar por usuario (UID)",
+        "  c            Cambiar orden (CPU% / RSS / PID)",
+        "  ESC          Limpiar filtro",
+        "",
+        "OTROS:",
+        "  + / -        Ajustar intervalo de refresco de la vista activa",
+        "  h / ?        Mostrar/ocultar esta ayuda",
+        "  q            Salir",
+        "",
+        "SENALES (desde otra terminal, kill -SEÑAL <pid> o pkill -SEÑAL -f main.py):",
+        "  SIGUSR1      Dump del estado a dump_<timestamp>.json",
+        "  SIGUSR2      Toggle modo verbose (mas detalle en cada vista)",
+        "  SIGHUP       Recargar config.json (intervalos)",
+        "",
+        "(presiona cualquier tecla para volver)",
+    ]
+    max_offset = max(0, len(lineas) - (alto - 2))
+    offset_ayuda = min(offset_ayuda, max_offset)
+
+    # dibujar solo la tajada visible (como el scroll de las vistas)
+    visibles = lineas[offset_ayuda : offset_ayuda + (alto - 2)]
+    fila = 1
+    for linea in visibles:
+        if fila >= alto - 1:
+            break
+        atributo = curses.A_BOLD if (linea.endswith(":") or "AYUDA" in linea) else curses.A_NORMAL
+        stdscr.addstr(fila, 2, linea[:ancho - 3], atributo)
+        fila += 1
+
 # ---------------------------------------------------------------------------
 # Mapa: tecla -> (nombre de vista, clave en el shared)
 # ---------------------------------------------------------------------------
@@ -379,6 +428,13 @@ VISTAS = {
     ord('5'): ("THREADS",    "threads"),
     ord('6'): ("SCHEDULING", "scheduling"),
     ord('7'): ("SISTEMA",    "sistema"),
+    ord('r'): ("RESUMEN",    "resumen"),
+    ord('m'): ("MEMORIA",    "memoria"),
+    ord('s'): ("SENALES",    "senales"),
+    ord('f'): ("FDS",        "fds"),
+    ord('t'): ("THREADS",    "threads"),
+    ord('p'): ("SCHEDULING", "scheduling"),
+    ord('g'): ("SISTEMA",    "sistema"),    
 }
 
 
@@ -396,10 +452,28 @@ def _loop(stdscr, shared, intervalos):
     modo_busqueda = False
     tipo_filtro = None
     orden = "cpu"
+    mostrar_ayuda = False
+    offset_ayuda = 0
 
     while shared["seguir"]:
         stdscr.erase()
         alto, ancho = stdscr.getmaxyx()
+
+        stdscr.erase()
+        alto, ancho = stdscr.getmaxyx()
+
+        if mostrar_ayuda:
+            dibujar_ayuda(stdscr, alto, ancho, offset_ayuda)
+            stdscr.refresh()
+            tecla = stdscr.getch()
+            if tecla in (ord('h'), ord('?'), ord('q'), 27):   # cierran la ayuda
+                mostrar_ayuda = False
+                offset_ayuda = 0
+            elif tecla == curses.KEY_DOWN:
+                offset_ayuda += 1
+            elif tecla == curses.KEY_UP:
+                offset_ayuda = max(0, offset_ayuda - 1)
+            continue
 
         titulo = f"MONITOR DE PROCESOS - Vista: {vista_nombre}  [orden: {orden}]  [cada {intervalos[vista_clave].value}s]"
         verbose = shared.get("verbose", False)
@@ -481,8 +555,7 @@ def _loop(stdscr, shared, intervalos):
             stdscr.addstr(alto - 2, 0,
                           f"Filtro {tipo_filtro}: '{filtro}' (ESC limpia)"[:ancho - 1],
                           curses.A_DIM)
-        pie = "1-7:vista | flechas | Enter:pin | /:nombre | u:usuario | c:orden | +/-:intervalo | q:salir"
-
+        pie = "1-7:vista | flechas | Enter:pin | /:buscar | u:usuario | c:orden | +/-:intervalo | h:ayuda | q:salir"
         stdscr.addstr(alto - 1, 0, pie[:ancho - 1], curses.A_DIM)
 
         stdscr.refresh()
@@ -546,6 +619,8 @@ def _loop(stdscr, shared, intervalos):
                     pin_pid = None
                 elif 0 <= seleccion < len(procesos):
                     pin_pid = procesos[seleccion][0]
+            elif tecla == ord('h') or tecla == ord('?'):
+                mostrar_ayuda = True
             elif tecla in VISTAS:
                 vista_nombre, vista_clave = VISTAS[tecla]
                 seleccion = 0
