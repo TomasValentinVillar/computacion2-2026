@@ -15,7 +15,6 @@ from display import display
 
 # ---------------------------------------------------------------------------
 # Banderas: los handlers SOLO las levantan (patron flag, async-signal-safe).
-# El loop principal las revisa y hace el trabajo real en un punto seguro.
 # ---------------------------------------------------------------------------
 cerrar = False
 recargar = False          # SIGHUP  -> recargar config
@@ -43,8 +42,33 @@ def manejador_usr2(signum, frame):
     toggle_verbose = True
 
 
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+DEFAULTS = {"resumen": 2, "memoria": 3, "fds": 5, "threads": 2,
+            "senales": 10, "scheduling": 10, "sistema": 2}
+
+
+def cargar_config():
+    """Lee config.json. Si no existe o esta roto, usa DEFAULTS (no crashea)."""
+    try:
+        with open("../config.json") as f:
+            config = json.load(f)
+        return config.get("intervalos", DEFAULTS)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return DEFAULTS
+
+
+def recargar_config(intervalos):
+    """SIGHUP: relee el config y actualiza los Values compartidos."""
+    inter = cargar_config()
+    for vista, valor in inter.items():
+        if vista in intervalos:
+            intervalos[vista].value = valor
+
+
 def dump_snapshot(shared):
-    """Guarda una foto de todos los datos actuales a dump_<timestamp>.json."""
+    """SIGUSR1: guarda una foto de todos los datos a dump_<timestamp>.json."""
     timestamp = int(time.time())
     nombre = f"dump_{timestamp}.json"
     snapshot = {}
@@ -56,7 +80,6 @@ def dump_snapshot(shared):
 
 
 if __name__ == "__main__":
-    # registrar los handlers
     signal.signal(signal.SIGINT, manejador)
     signal.signal(signal.SIGTERM, manejador)
     signal.signal(signal.SIGHUP, manejador_hup)
@@ -68,17 +91,18 @@ if __name__ == "__main__":
     shared["seguir"] = True
     shared["verbose"] = False
 
+    # cargar intervalos desde config.json (o defaults)
+    inter = cargar_config()
     intervalos = {
-        "resumen": Value('i', 2),
-        "memoria": Value('i', 3),
-        "fds": Value('i', 5),
-        "threads": Value('i', 2),
-        "senales": Value('i', 10),
-        "scheduling": Value('i', 10),
-        "sistema": Value('i', 2),
+        "resumen": Value('i', inter.get("resumen", 2)),
+        "memoria": Value('i', inter.get("memoria", 3)),
+        "fds": Value('i', inter.get("fds", 5)),
+        "threads": Value('i', inter.get("threads", 2)),
+        "senales": Value('i', inter.get("senales", 10)),
+        "scheduling": Value('i', inter.get("scheduling", 10)),
+        "sistema": Value('i', inter.get("sistema", 2)),
     }
 
-    # lista de procesos (escalable)
     procesos = [
         Process(target=analizador_resumen, args=(shared, intervalos["resumen"])),
         Process(target=analizador_memoria, args=(shared, intervalos["memoria"])),
@@ -90,7 +114,6 @@ if __name__ == "__main__":
         Process(target=display, args=(shared, intervalos)),
     ]
 
-    # lanzar TODOS
     for p in procesos:
         p.start()
 
@@ -98,23 +121,18 @@ if __name__ == "__main__":
     while not cerrar:
         time.sleep(0.5)
 
-        # SIGUSR2: toggle verbose
         if toggle_verbose:
             toggle_verbose = False
             shared["verbose"] = not shared["verbose"]
 
-        # SIGUSR1: dump del snapshot
         if dump:
             dump = False
             dump_snapshot(shared)
 
-        # SIGHUP: recargar config (lo implementamos cuando exista config.json)
         if recargar:
             recargar = False
-            # recargar_config(shared, intervalos)   # TODO: cuando haya config.json
-            pass
+            recargar_config(intervalos)
 
-    # cierre ordenado
     print("\ncerrando...")
     shared["seguir"] = False
     for p in procesos:

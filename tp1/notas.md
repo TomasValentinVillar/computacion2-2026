@@ -263,3 +263,28 @@ El cambio toma efecto en la proxima vuelta (el sleep en curso usa el valor viejo
 Defaults por vista segun cuan rapido cambia el dato: CPU 2s (rapido), señales/
 scheduling 10s (casi estaticos). No releer datos estaticos seguido = eficiencia.
 Manager (datos complejos) + Value (numeros simples) = herramienta adecuada por caso.
+
+## Señales del monitor (patron flag)
+Patron flag (el que recomienda el profe, clase 6): el handler SOLO levanta una
+bandera (async-signal-safe); el loop del padre la revisa y hace el trabajo real
+en punto seguro. Mismo patron que SIGINT (cerrar=True).
+- SIGUSR1 -> dump: snapshot de las 7 vistas a dump_<timestamp>.json (dict(shared)
+  para convertir el proxy del Manager a dict serializable).
+- SIGUSR2 -> toggle verbose (shared["verbose"]).
+- SIGHUP -> recargar config (pendiente config.json).
+Los hijos IGNORAN estas 3 señales (SIG_IGN); solo el padre reacciona.
+Por eso pkill -USR1 -f main.py funciona: se la manda a los 9, los 8 hijos la
+ignoran, solo el padre hace el dump.
+dump_*.json va al .gitignore (generado en runtime).
+
+## Campos completados (revisión contra consigna)
+- señales: + ShdPnd (pendientes de grupo)
+- scheduling: + utime/stime (stat 14-15), + rt_priority (stat campo 40 -> resto[37])
+- threads: + context switches por thread (parsear_status ahora acepta tid)
+- sistema (completado): buffers/cached/swap de meminfo; boot_time (btime en /proc/stat);
+  conteos recorriendo /proc (total, por estado, threads_total, zombies);
+  top_cpu/top_mem derivados de shared["resumen"]/["memoria"];
+  CPU global user/system/idle/iowait % por DELTA de /proc/stat linea cpu
+  (dos lecturas, guarda cpu_ant entre vueltas; user+nice juntos; suma da 100%).
+parsear_status(pid, tid=None) y parsear_stat(pid, tid=None): mismo patron, sirven
+para proceso y para thread sin romper llamadas viejas.
