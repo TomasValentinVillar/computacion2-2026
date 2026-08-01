@@ -288,3 +288,21 @@ dump_*.json va al .gitignore (generado en runtime).
   (dos lecturas, guarda cpu_ant entre vueltas; user+nice juntos; suma da 100%).
 parsear_status(pid, tid=None) y parsear_stat(pid, tid=None): mismo patron, sirven
 para proceso y para thread sin romper llamadas viejas.
+
+## config.json + SIGHUP
+config.json (en tp1/) tiene los intervalos por defecto. main.py lo carga al arrancar
+con cargar_config() (try/except: si falta o esta roto, usa DEFAULTS, no crashea).
+SIGHUP -> bandera recargar -> el loop relee config.json y actualiza los Value
+compartidos (intervalos[vista].value = nuevo). Los analizadores lo ven en su
+proxima vuelta (misma mecanica que +/- del display, pero por señal).
+Verificado: cambiar config + SIGHUP aplica en vivo; SIGHUP tambien restaura los
+ajustes manuales (+/-) a los valores del config. Patron tipo "systemctl reload".
+Ruta ../config.json porque main corre desde src/ y el config esta en tp1/.
+
+## Teclas alternativas + ayuda
+Teclas de vista alternativas (r/m/s/f/t/p/g) agregadas al dict VISTAS: extender
+es agregar entradas, no tocar logica (ventaja del despacho por diccionario).
+Ayuda (h/?): flag mostrar_ayuda; si esta activo, dibuja la ayuda y hace continue
+(saltea el dibujo de la vista). Scrolleable con flechas (offset_ayuda, mismo
+patron de scroll que las vistas). Cierran: h, ?, q, ESC.
+Pie actualizado con h:ayuda.
