@@ -33,15 +33,19 @@ def parsear_stat(pid,tid=None):
     policy = resto[38]
     pgid = resto[2]
     sid = resto[3]
+    rt_priority = resto[37]
 
     return {"pid": pid, "comm": nombre, "estado": estado, "ppid": ppid,"minflt": minflt, "majflt": majflt,
-            "utime": utime, "stime": stime, "priority": priority, "nice": nice, "policy": policy, "pgid": pgid, "sid": sid}
+            "utime": utime, "stime": stime, "priority": priority, "nice": nice, "policy": policy, "pgid": pgid, "sid": sid, 'rt_priority': rt_priority,}
 
 
-def parsear_status(pid):
-    """Parsea /proc/<pid>/status. Devuelve dict clave->valor de todos los campos."""
+def parsear_status(pid, tid=None):
+    if tid is None:
+        ruta = f"/proc/{pid}/status"
+    else:
+        ruta = f"/proc/{pid}/task/{tid}/status"
     datos = {}
-    with open(f"/proc/{pid}/status") as f:
+    with open(ruta) as f:
         for linea in f:
             partes = linea.split(":", 1)
             clave = partes[0].strip()

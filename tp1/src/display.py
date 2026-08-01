@@ -317,6 +317,9 @@ def _loop(stdscr, shared, intervalos):
         alto, ancho = stdscr.getmaxyx()
 
         titulo = f"MONITOR DE PROCESOS - Vista: {vista_nombre}  [orden: {orden}]  [cada {intervalos[vista_clave].value}s]"
+        verbose = shared.get("verbose", False)
+        if verbose:
+            titulo += "  [VERBOSE]"
         stdscr.addstr(0, 0, titulo[:ancho - 1], curses.A_BOLD)
 
         datos = shared.get(vista_clave, {})

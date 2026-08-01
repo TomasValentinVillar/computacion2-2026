@@ -1,5 +1,5 @@
 import os, time, signal
-from procfs import parsear_stat, leer_jiffies_sistema
+from procfs import parsear_stat, leer_jiffies_sistema, parsear_status
 
 
 def analizador_threads(shared, intervalo):
@@ -26,6 +26,7 @@ def analizador_threads(shared, intervalo):
                 for tid in tids:                      # LOOP INTERNO: cada thread
                     try:
                         stat = parsear_stat(pid, tid)
+                        status_thread = parsear_status(pid, tid)
 
                         # --- CPU% del thread (delta de jiffies) ---
                         jiffies_thread = int(stat['utime']) + int(stat['stime'])
@@ -47,6 +48,8 @@ def analizador_threads(shared, intervalo):
                             'comm': stat['comm'],
                             'estado': stat['estado'],
                             'cpu': cpu,
+                            'voluntary': status_thread.get('voluntary_ctxt_switches', '0'),
+                            'nonvoluntary': status_thread.get('nonvoluntary_ctxt_switches', '0'),
                         }
                     except (FileNotFoundError, PermissionError, ProcessLookupError):
                         continue

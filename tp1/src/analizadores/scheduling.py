@@ -12,7 +12,6 @@ POLICIES = {
 }
 def analizador_scheduling(shared, intervalo):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-    signal.signal(signal.SIGUSR2, signal.SIG_IGN)
     signal.signal(signal.SIGUSR1, signal.SIG_IGN)
     signal.signal(signal.SIGUSR2, signal.SIG_IGN)
     signal.signal(signal.SIGHUP, signal.SIG_IGN)
@@ -36,6 +35,9 @@ def analizador_scheduling(shared, intervalo):
                     'affinity': list(os.sched_getaffinity(int(pid))),
                     'comm': stat['comm'],
                     'Uid': status.get('Uid', ''),
+                    'utime': stat['utime'],
+                    'stime': stat['stime'],
+                    'rt_priority': stat['rt_priority'],
                 }
             except (FileNotFoundError, PermissionError, ProcessLookupError):
                 continue

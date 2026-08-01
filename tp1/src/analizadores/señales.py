@@ -3,7 +3,6 @@ from procfs import parsear_status, decodificar_senales, parsear_stat
 
 def analizador_senales(shared, intervalo):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-    signal.signal(signal.SIGUSR2, signal.SIG_IGN)
     signal.signal(signal.SIGUSR1, signal.SIG_IGN)
     signal.signal(signal.SIGUSR2, signal.SIG_IGN)
     signal.signal(signal.SIGHUP, signal.SIG_IGN)
@@ -21,6 +20,7 @@ def analizador_senales(shared, intervalo):
                     'SigIgn': decodificar_senales(status.get('SigIgn', '0')),
                     'SigCgt': decodificar_senales(status.get('SigCgt', '0')),
                     'SigPnd': decodificar_senales(status.get('SigPnd', '0')),
+                    'ShdPnd': decodificar_senales(status.get('ShdPnd', '0')),
                     'comm' : stat['comm'],
                     'Uid': status.get('Uid', ''),
                 }
