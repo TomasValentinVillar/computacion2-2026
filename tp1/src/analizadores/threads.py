@@ -4,6 +4,10 @@ from procfs import parsear_stat, leer_jiffies_sistema
 
 def analizador_threads(shared, intervalo):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
+    signal.signal(signal.SIGUSR2, signal.SIG_IGN)
+    signal.signal(signal.SIGUSR1, signal.SIG_IGN)
+    signal.signal(signal.SIGUSR2, signal.SIG_IGN)
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
 
     jiffies_ant = {}          # historial: {"pid:tid": jiffies_anteriores}
     jiffies_ant_sist = 0      # jiffies del sistema en la vuelta anterior

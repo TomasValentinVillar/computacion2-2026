@@ -7,6 +7,10 @@ from procfs import parsear_stat, parsear_status, leer_jiffies_sistema, calcular_
 
 def analizador_resumen(shared, intervalo):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
+    signal.signal(signal.SIGUSR2, signal.SIG_IGN)
+    signal.signal(signal.SIGUSR1, signal.SIG_IGN)
+    signal.signal(signal.SIGUSR2, signal.SIG_IGN)
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
     jiffies_ant_proc = {}
     jiffies_ant_sist = 0
 

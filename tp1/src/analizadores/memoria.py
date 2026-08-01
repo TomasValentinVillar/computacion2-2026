@@ -5,7 +5,10 @@ from procfs import parsear_status, parsear_stat, parsear_maps
 
 def analizador_memoria(shared, intervalo):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-
+    signal.signal(signal.SIGUSR2, signal.SIG_IGN)
+    signal.signal(signal.SIGUSR1, signal.SIG_IGN)
+    signal.signal(signal.SIGUSR2, signal.SIG_IGN)
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
     while shared["seguir"]:
         # (A) listar PIDs actuales
         pids = [x for x in os.listdir("/proc") if x.isdigit()]

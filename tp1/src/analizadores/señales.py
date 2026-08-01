@@ -3,7 +3,10 @@ from procfs import parsear_status, decodificar_senales, parsear_stat
 
 def analizador_senales(shared, intervalo):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-
+    signal.signal(signal.SIGUSR2, signal.SIG_IGN)
+    signal.signal(signal.SIGUSR1, signal.SIG_IGN)
+    signal.signal(signal.SIGUSR2, signal.SIG_IGN)
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
     while shared["seguir"]:
         pids = [x for x in os.listdir("/proc") if x.isdigit()]
 

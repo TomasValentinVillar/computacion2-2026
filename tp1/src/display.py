@@ -465,4 +465,8 @@ def _loop(stdscr, shared, intervalos):
 
 def display(shared, intervalos):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
+    signal.signal(signal.SIGUSR2, signal.SIG_IGN)
+    signal.signal(signal.SIGUSR1, signal.SIG_IGN)
+    signal.signal(signal.SIGUSR2, signal.SIG_IGN)
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
     curses.wrapper(_loop, shared, intervalos)
