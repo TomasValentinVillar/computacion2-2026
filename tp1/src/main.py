@@ -5,7 +5,7 @@ from multiprocessing import Process, Manager, Value
 
 from analizadores.resumen import analizador_resumen
 from analizadores.memoria import analizador_memoria
-from analizadores.señales import analizador_senales
+from tp1.src.analizadores.senales import analizador_senales
 from analizadores.fds import analizador_fds
 from analizadores.threads import analizador_threads
 from analizadores.scheduling import analizador_scheduling

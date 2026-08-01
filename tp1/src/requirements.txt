@@ -1,0 +1,2 @@
+# Este proyecto usa únicamente la biblioteca estándar de Python 3.11.
+# No requiere dependencias externas.
