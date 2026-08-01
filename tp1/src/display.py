@@ -7,43 +7,73 @@ import signal
 # de esa vista (leidos del shared) y las dimensiones, y dibuja su tabla.
 # ---------------------------------------------------------------------------
 
-def ordenar_vista(vista_clave, datos):
-    """Devuelve la lista [(pid, info), ...] ordenada segun la vista.
-    UNICA fuente del orden: la usan tanto el dibujo como el pin, asi el
-    indice 'seleccion' significa lo mismo en los dos lados."""
-
+def orden_natural(vista_clave, items):
+    """El orden 'propio' de cada vista, para usar de fallback."""
     if vista_clave == "resumen":
-        return sorted(datos.items(), key=lambda x: x[1]['cpu'], reverse=True)
-
+        return sorted(items, key=lambda x: x[1].get('cpu', 0), reverse=True)
     elif vista_clave == "memoria":
-        return sorted(datos.items(),
-                      key=lambda x: int(x[1]['VmRSS'].split()[0]), reverse=True)
-
+        return sorted(items, key=lambda x: _rss(x[1]), reverse=True)
     elif vista_clave == "senales":
-        return sorted(datos.items(), key=lambda x: len(x[1]['SigCgt']), reverse=True)
-
+        return sorted(items, key=lambda x: len(x[1].get('SigCgt', [])), reverse=True)
     elif vista_clave == "fds":
-        return sorted(datos.items(), key=lambda x: int(x[0]))
-
+        return sorted(items, key=lambda x: len(x[1]))   # cantidad de fds
     elif vista_clave == "threads":
-        def max_cpu(info):
-            if not info['threads']:
-                return 0.0
-            return max(d['cpu'] for d in info['threads'].values())
-        return sorted(datos.items(), key=lambda x: max_cpu(x[1]), reverse=True)
-
+        return sorted(items, key=lambda x: _maxcpu(x[1]), reverse=True)
     elif vista_clave == "scheduling":
-        return sorted(datos.items(),
-                      key=lambda x: (int(x[1]['priority']), int(x[1]['nice'])),
+        return sorted(items,
+                      key=lambda x: (int(x[1].get('priority', 0)),
+                                     int(x[1].get('nice', 0))),
                       reverse=True)
+    else:
+        return items
+
+
+def _rss(info):
+    v = info.get('VmRSS', '')
+    return int(v.split()[0]) if v else 0
+
+
+def _maxcpu(info):
+    if info.get('threads'):
+        return max(d['cpu'] for d in info['threads'].values())
+    return 0
+
+
+def _tiene_cpu(vista_clave):
+    return vista_clave in ("resumen", "threads")
+
+
+def _tiene_rss(vista_clave):
+    return vista_clave == "memoria"
+
+
+def ordenar_vista(vista_clave, datos, orden):
+    items = list(datos.items())
+
+    if orden == "pid":
+        return sorted(items, key=lambda x: int(x[0]))
+
+    elif orden == "cpu":
+        if _tiene_cpu(vista_clave):
+            # resumen -> por cpu ; threads -> por maxCPU
+            if vista_clave == "threads":
+                return sorted(items, key=lambda x: _maxcpu(x[1]), reverse=True)
+            return sorted(items, key=lambda x: x[1].get('cpu', 0), reverse=True)
+        else:
+            return orden_natural(vista_clave, items)   # fallback
+
+    elif orden == "rss":
+        if _tiene_rss(vista_clave):
+            return sorted(items, key=lambda x: _rss(x[1]), reverse=True)
+        else:
+            return orden_natural(vista_clave, items)   # fallback
 
     else:
-        return list(datos.items())
-
+        return orden_natural(vista_clave, items)
 # --- dibujar_resumen: ahora recibe offset y dibuja solo la tajada visible ---
 
 def dibujar_resumen(stdscr, procesos, alto, ancho, seleccion, offset, filas_visibles):
-    header = f"{'PID':>7} {'CPU%':>6} {'THR':>4} {'ST':>3}  COMANDO"
+    header = f"{'PID':>7} {'UID':>6} {'CPU%':>6} {'THR':>4} {'ST':>3}  COMANDO"
     stdscr.addstr(2, 0, header, curses.A_BOLD)
 
     # tajada visible: desde offset, tantos como entren
@@ -52,7 +82,8 @@ def dibujar_resumen(stdscr, procesos, alto, ancho, seleccion, offset, filas_visi
     fila = 3
     for i, (pid, info) in enumerate(visibles):
         indice_real = offset + i       # el indice real en la lista completa
-        linea = (f"{pid:>7} {info['cpu']:>6.1f} "
+        uid = info.get('Uid', '').split()[0] if info.get('Uid') else '?'
+        linea = (f"{pid:>7} {uid:>6} {info['cpu']:>6.1f} "
                  f"{info['Threads']:>4} {info['estado']:>3}  {info['comm']}")
         if indice_real == seleccion:
             stdscr.addstr(fila, 0, linea[:ancho - 1], curses.A_REVERSE)
@@ -266,7 +297,7 @@ VISTAS = {
 }
 
 
-def _loop(stdscr, shared):
+def _loop(stdscr, shared, intervalos):
     curses.curs_set(0)
     stdscr.timeout(200)
     stdscr.keypad(True)
@@ -276,18 +307,22 @@ def _loop(stdscr, shared):
     seleccion = 0
     offset = 0
     pin_pid = None
+    filtro = ""
+    modo_busqueda = False
+    tipo_filtro = None
+    orden = "cpu"
 
     while shared["seguir"]:
         stdscr.erase()
         alto, ancho = stdscr.getmaxyx()
 
-        titulo = f"MONITOR DE PROCESOS - Vista: {vista_nombre}"
+        titulo = f"MONITOR DE PROCESOS - Vista: {vista_nombre}  [orden: {orden}]  [cada {intervalos[vista_clave].value}s]"
         stdscr.addstr(0, 0, titulo[:ancho - 1], curses.A_BOLD)
 
         datos = shared.get(vista_clave, {})
         # ordenar UNA vez, fuente unica
         if vista_clave != "sistema":
-            procesos = ordenar_vista(vista_clave, datos)
+            procesos = ordenar_vista(vista_clave, datos, orden)
         else:
             procesos = []
         cantidad = len(datos)
@@ -311,6 +346,24 @@ def _loop(stdscr, shared):
         if seleccion >= offset + filas_visibles:    # se fue por abajo
             offset = seleccion - filas_visibles + 1
         
+        datos = shared.get(vista_clave, {})
+
+        if vista_clave != "sistema":
+            procesos = ordenar_vista(vista_clave, datos, orden)
+        else:
+            procesos = []
+
+        # --- aplicar filtro por nombre ---
+        if filtro:
+            if tipo_filtro == "nombre":
+                procesos = [(pid, info) for pid, info in procesos
+                            if filtro.lower() in info.get('comm', '').lower()]
+            elif tipo_filtro == "usuario":
+                procesos = [(pid, info) for pid, info in procesos
+                    if info.get('Uid') and filtro == info['Uid'].split()[0]]
+
+        cantidad = len(procesos)
+        # ... el resto (limitar seleccion, offset, etc.) sigue igual ...
 
         if vista_clave == "resumen":
             dibujar_resumen(stdscr, procesos, alto, ancho, seleccion, offset, filas_visibles)
@@ -332,30 +385,84 @@ def _loop(stdscr, shared):
         # panel de detalle abajo (si hay algo pineado y no es la vista sistema)
         if pin_pid is not None and vista_clave != "sistema":
             dibujar_detalle(stdscr, shared, pin_pid, fila_sep, alto, ancho)
-
-        pie = "1-7: vista | flechas: navegar | Enter: pin | q: salir"
+        
+        if modo_busqueda:
+            etiqueta = "Buscar nombre" if tipo_filtro == "nombre" else "Buscar UID"
+            stdscr.addstr(alto - 2, 0, f"{etiqueta}: {filtro}_"[:ancho - 1])
+        elif filtro:
+            stdscr.addstr(alto - 2, 0,
+                          f"Filtro {tipo_filtro}: '{filtro}' (ESC limpia)"[:ancho - 1],
+                          curses.A_DIM)
+        pie = "1-7:vista | flechas | Enter:pin | /:nombre | u:usuario | c:orden | +/-:intervalo | q:salir"
 
         stdscr.addstr(alto - 1, 0, pie[:ancho - 1], curses.A_DIM)
 
         stdscr.refresh()
 
         tecla = stdscr.getch()
-        if tecla == ord('q'):
-            break
-        elif tecla == curses.KEY_UP:
-            seleccion -= 1
-        elif tecla == curses.KEY_DOWN:
-            seleccion += 1
-        elif tecla in VISTAS:
-            vista_nombre, vista_clave = VISTAS[tecla]
-            seleccion = 0
-            offset = 0                  # al cambiar de vista, resetear scroll
-        elif tecla == ord('\n') or tecla == curses.KEY_ENTER:
-            if pin_pid is not None:
-                pin_pid = None                       # ya habia pin -> despinear
-            elif 0 <= seleccion < len(procesos):
-                pin_pid = procesos[seleccion][0]     # pinear el seleccionado
 
-def display(shared):
+        if modo_busqueda:
+            # --- MODO BUSQUEDA: acumular caracteres ---
+            if tecla == ord('\n') or tecla == curses.KEY_ENTER:
+                modo_busqueda = False               # confirmar
+            elif tecla == 27:                        # ESC: cancelar y limpiar
+                modo_busqueda = False
+                filtro = ""
+            elif tecla == curses.KEY_BACKSPACE or tecla == 127:
+                filtro = filtro[:-1]                 # borrar ultimo caracter
+            elif 32 <= tecla <= 126:
+                filtro += chr(tecla)                 # agregar caracter
+            # al cambiar el filtro, reseteamos la seleccion
+            seleccion = 0
+            offset = 0
+        else:
+            # --- MODO NORMAL: las teclas de siempre ---
+            if tecla == ord('q'):
+                break
+            elif tecla == ord('/'):
+                modo_busqueda = True
+                tipo_filtro = "nombre"
+                filtro = ""                          # empezar filtro limpio
+                seleccion = 0
+                offset = 0
+            elif tecla == ord('u'):
+                modo_busqueda = True
+                tipo_filtro = "usuario"
+                filtro = ""
+                seleccion = 0
+                offset = 0
+            elif tecla == ord('c'):
+                if orden == "cpu":
+                    orden = "rss"
+                elif orden == "rss":
+                    orden = "pid"
+                else:
+                    orden = "cpu"
+                seleccion = 0
+                offset = 0
+            elif tecla == ord('+') or tecla == ord('='):    # '=' porque + suele ser shift+=
+                intervalos[vista_clave].value += 1
+            elif tecla == ord('-'):
+                if intervalos[vista_clave].value > 1:        # no bajar de 1 segundo
+                    intervalos[vista_clave].value -= 1
+            elif tecla == 27:                        # ESC en modo normal: limpiar filtro
+                filtro = ""
+                seleccion = 0
+                offset = 0
+            elif tecla == curses.KEY_UP:
+                seleccion -= 1
+            elif tecla == curses.KEY_DOWN:
+                seleccion += 1
+            elif tecla == ord('\n') or tecla == curses.KEY_ENTER:
+                if pin_pid is not None:
+                    pin_pid = None
+                elif 0 <= seleccion < len(procesos):
+                    pin_pid = procesos[seleccion][0]
+            elif tecla in VISTAS:
+                vista_nombre, vista_clave = VISTAS[tecla]
+                seleccion = 0
+                offset = 0
+
+def display(shared, intervalos):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-    curses.wrapper(_loop, shared)
+    curses.wrapper(_loop, shared, intervalos)

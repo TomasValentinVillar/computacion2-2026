@@ -1,14 +1,12 @@
 services:
   monitor:                    # nombre de nuestro servicio (elegido por nosotros)
-
     build: .                  # construi la imagen desde el Dockerfile de ESTA carpeta
-
     pid: "host"               # usa el PID namespace del host: ve TODOS los procesos
-
     privileged: true          # acceso pleno al sistema. Un monitor tipo htop necesita
                               # leer /proc de procesos ajenos (incluidos los symlinks de
                               # /proc/<pid>/fd/), lo que requiere saltear varias capas de
                               # aislamiento a la vez (capabilities + seccomp + LSM). Ver README.
-
     stdin_open: true          # mantene stdin abierto (el -i de "docker run -it")
     tty: true                 # asigna una terminal (el -t). Necesario para la TUI.
+    environment:
+      - TERM=xterm-256color   # curses necesita saber el tipo de terminal para dibujar

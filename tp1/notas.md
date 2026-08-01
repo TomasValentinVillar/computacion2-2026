@@ -213,3 +213,53 @@ va desde alto//2. Sin pin: lista usa toda la pantalla.
 dibujar_detalle junta info del PID desde varias vistas del shared (resumen+memoria+
 scheduling) con doble .get() - NO toca /proc. Guarda: si el PID ya no esta (murio),
 muestra "no disponible" en vez de crashear.
+
+## Filtro por nombre (tecla /)
+Dos modos: normal (teclas = comandos) y busqueda (teclas = texto). Variable
+modo_busqueda distingue: sin ella, escribir "q" saldria del programa.
+/ entra a modo busqueda; se acumulan caracteres con chr(tecla) (inverso de ord);
+backspace = filtro[:-1]; Esc cancela/limpia; Enter confirma.
+Solo se acumulan imprimibles (32 <= tecla <= 126).
+El filtro se aplica despues de ordenar_vista, antes de dibujar:
+list comprehension con filtro.lower() in comm.lower() (case-insensitive).
+Al filtrar se resetea seleccion/offset (el indice viejo ya no vale).
+
+## Filtro por usuario (tecla u)
+Reusa el modo busqueda; tipo_filtro ("nombre"/"usuario") distingue como se aplica.
+Nombre: 'in' (parcial) sobre comm. Usuario: '==' (exacto) sobre el primer campo
+de Uid (info['Uid'].split()[0], el real UID).
+LIMITACION CONOCIDA: el filtro por usuario funciona en las vistas que guardan Uid
+en su ficha (resumen, memoria, senales, scheduling). fds y threads no parsean
+status, asi que no incluyen Uid -> el filtro por usuario no aplica en esas dos.
+Decision de diseno: no forzar parsear_status en fds/threads solo para el filtro.
+Caso borde: fds y threads no tienen Uid en su ficha. El filtro por usuario usa
+info.get('Uid') and filtro == info['Uid'].split()[0]: el short-circuit del 'and'
+evita el IndexError (si no hay Uid, corta antes del .split()[0]). En esas vistas
+el filtro por usuario da lista vacia en vez de crashear.
+
+## Toggle de orden (tecla c): CPU% / RSS / PID
+Variable global 'orden'. c rota cpu -> rss -> pid.
+Diseño híbrido: si la vista tiene el campo del criterio, ordena por él (cpu en
+resumen/threads, rss en memoria); si NO lo tiene, cae al ORDEN NATURAL de la vista
+(no a PID), así ninguna vista se ve desordenada. pid ordena todas por PID.
+Orden natural por vista: resumen=CPU, memoria=RSS, senales=#handlers, fds=#fds,
+threads=maxCPU, scheduling=(priority,nice). Cumple la consigna (CPU%/RSS/PID).
+
+## Docker: reconstruir con cambios
+docker compose build --no-cache && docker compose run --rm monitor
+El 'run' (no 'up') conecta el teclado a curses. --no-cache evita imagen vieja.
+Dentro del contenedor (privileged) se leen TODOS los procesos incluidos root:
+FDs de systemd (PID 1) visibles, orden por PID arranca en 1.
+
+## Intervalos ajustables (+/-) con multiprocessing.Value
+Value = memoria compartida para UN valor simple (Value('i', 2) = entero=2).
+Mas liviano que Manager: acceso directo, sin proceso servidor intermediario.
+Un Value por analizador, en un dict intervalos={"resumen": Value('i',2), ...}.
+main crea el dict; a cada analizador le pasa SU value (args); al display le pasa
+el dict ENTERO (toca el de la vista activa con +/-).
+Analizador: time.sleep(intervalo.value) en vez de sleep fijo.
+Display: +/- hace intervalos[vista].value +=/-= 1 (minimo 1s, si no busy-wait).
+El cambio toma efecto en la proxima vuelta (el sleep en curso usa el valor viejo).
+Defaults por vista segun cuan rapido cambia el dato: CPU 2s (rapido), señales/
+scheduling 10s (casi estaticos). No releer datos estaticos seguido = eficiencia.
+Manager (datos complejos) + Value (numeros simples) = herramienta adecuada por caso.

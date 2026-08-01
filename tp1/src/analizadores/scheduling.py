@@ -10,7 +10,7 @@ POLICIES = {
     "3": "BATCH",
     "5": "IDLE",
 }
-def analizador_scheduling(shared):
+def analizador_scheduling(shared, intervalo):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     while shared["seguir"]:
@@ -31,7 +31,8 @@ def analizador_scheduling(shared):
                     'pgid': stat['pgid'],
                     'sid': stat['sid'],
                     'affinity': list(os.sched_getaffinity(int(pid))),
-                    'comm': stat['comm']
+                    'comm': stat['comm'],
+                    'Uid': status.get('Uid', ''),
                 }
             except (FileNotFoundError, PermissionError, ProcessLookupError):
                 continue
@@ -41,4 +42,4 @@ def analizador_scheduling(shared):
         print(f"{'PID':>7} {'PRIO':>5} {'NICE':>5} {'POLICY':>10} {'VOLUNTARY':>10} {'NONVOLUNTARY':>15} {'PGID':>7} {'SID':>7} {'AFFINITY':>20}")
         for pid, info in sorted(resultado.items(), key=lambda x: (int(x[1]['priority']), int(x[1]['nice'])), reverse=True)[:10]:
             print(f"{pid:>7} {info['priority']:>5} {info['nice']:>5} {info['policy']:>10} {info['voluntary_ctxt_switches']:>10} {info['nonvoluntary_ctxt_switches']:>15} {info['pgid']:>7} {info['sid']:>7} {str(info['affinity']):>20}")'''
-        time.sleep(2)
+        time.sleep(intervalo.value)

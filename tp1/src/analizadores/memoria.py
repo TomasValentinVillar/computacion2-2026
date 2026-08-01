@@ -3,7 +3,7 @@ import signal
 
 from procfs import parsear_status, parsear_stat, parsear_maps
 
-def analizador_memoria(shared):
+def analizador_memoria(shared, intervalo):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     while shared["seguir"]:
@@ -36,7 +36,8 @@ def analizador_memoria(shared):
                     'heap': maps['heap'],
                     'stack': maps['stack'],
                     'shared': maps['shared'],
-                    'comm': stat['comm']
+                    'comm': stat['comm'],
+                    'Uid': status.get('Uid', ''),
                 }
             except (FileNotFoundError, PermissionError, ProcessLookupError):
                 continue
@@ -46,4 +47,4 @@ def analizador_memoria(shared):
         for pid, info in sorted(resultado.items(), key=lambda x: int(x[1]['VmRSS'].split()[0]), reverse=True)[:10]:
             print(f"{pid:>7} {info['VmRSS']:>10} {info['text']:>10} {info['data']:>10} {info['heap']:>10} {info['stack']:>10} {info['shared']:>10}")'''
         shared["memoria"] = resultado
-        time.sleep(2)
+        time.sleep(intervalo.value)

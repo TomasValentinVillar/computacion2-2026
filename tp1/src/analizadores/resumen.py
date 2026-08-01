@@ -5,7 +5,7 @@ from procfs import parsear_stat, parsear_status, leer_jiffies_sistema, calcular_
 
 # la bandera, visible para el handler y para el loop
 
-def analizador_resumen(shared):
+def analizador_resumen(shared, intervalo):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     jiffies_ant_proc = {}
     jiffies_ant_sist = 0
@@ -35,7 +35,7 @@ def analizador_resumen(shared):
                     'cpu': cpu,
                     'Threads': status['Threads'],
                     'PPid': status['PPid'],
-                    'Uid': status['Uid']
+                    'Uid': status['Uid'],
                 }
                 nuevos_jiffies_proc[pid] = jiffies_proc_ahora
             except (FileNotFoundError, PermissionError, ProcessLookupError):
@@ -55,5 +55,5 @@ def analizador_resumen(shared):
             print(f"{pid:>7} {info['cpu']:>6.1f} {info['Threads']:>4} {info['estado']:>2}  {info['comm']}")
 '''
         # (F) dormir el intervalo
-        time.sleep(2)
+        time.sleep(intervalo.value)
 

@@ -1,7 +1,7 @@
 import os, time, signal
 from procfs import parsear_status, decodificar_senales, parsear_stat
 
-def analizador_senales(shared):
+def analizador_senales(shared, intervalo):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     while shared["seguir"]:
@@ -18,7 +18,8 @@ def analizador_senales(shared):
                     'SigIgn': decodificar_senales(status.get('SigIgn', '0')),
                     'SigCgt': decodificar_senales(status.get('SigCgt', '0')),
                     'SigPnd': decodificar_senales(status.get('SigPnd', '0')),
-                    'comm' : stat['comm']
+                    'comm' : stat['comm'],
+                    'Uid': status.get('Uid', ''),
                 }
             except (FileNotFoundError, PermissionError, ProcessLookupError):
                 continue
@@ -28,4 +29,4 @@ def analizador_senales(shared):
             cgt = ", ".join(info['SigCgt'][:5])          # solo las primeras 5 para que entre
             print(f"{pid:>7} {len(info['SigBlk']):>5} {len(info['SigIgn']):>5} {len(info['SigCgt']):>5} {len(info['SigPnd']):>5}  {cgt}")'''
         shared["senales"] = resultado
-        time.sleep(2)
+        time.sleep(intervalo.value)

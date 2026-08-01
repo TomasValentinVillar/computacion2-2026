@@ -1,7 +1,7 @@
 import os, time, signal
 from procfs import tipo_fd
 
-def analizador_fds(shared):
+def analizador_fds(shared, intervalo):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     while shared["seguir"]:
@@ -36,4 +36,4 @@ def analizador_fds(shared):
             tipos_str = ", ".join(f"{k}:{v}" for k, v in tipos.items())
             print(f"{pid:>7} {len(info):>5} {tipos_str}")'''
         shared["fds"] = resultado
-        time.sleep(2)
+        time.sleep(intervalo.value)

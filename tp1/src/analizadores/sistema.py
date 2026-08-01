@@ -1,7 +1,7 @@
 import os, time, signal
 
 
-def analizador_sistema(shared):
+def analizador_sistema(shared, intervalo):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     while shared["seguir"]:
@@ -50,4 +50,4 @@ def analizador_sistema(shared):
         print(f"  Load (1/5/15): {resultado['load_1min']} / "
               f"{resultado['load_5min']} / {resultado['load_15min']}")'''
 
-        time.sleep(2)
+        time.sleep(intervalo.value)

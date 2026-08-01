@@ -2,7 +2,7 @@ import os, time, signal
 from procfs import parsear_stat, leer_jiffies_sistema
 
 
-def analizador_threads(shared):
+def analizador_threads(shared, intervalo):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     jiffies_ant = {}          # historial: {"pid:tid": jiffies_anteriores}
@@ -73,4 +73,4 @@ def analizador_threads(shared):
             print(f"{pid:>7} {info['num_threads']:>5} {max_cpu(info):>7.1f}  {threads_str}")'''
 
         shared["threads"] = resultado
-        time.sleep(2)
+        time.sleep(intervalo.value)

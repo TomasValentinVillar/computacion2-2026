@@ -9,6 +9,7 @@ from analizadores.threads import analizador_threads
 from analizadores.scheduling import analizador_scheduling
 from analizadores.sistema import analizador_sistema
 from display import display
+from multiprocessing import Value
 
 cerrar = False
 
@@ -24,16 +25,26 @@ if __name__ == "__main__":
     shared = manager.dict()
     shared["seguir"] = True
 
+    intervalos = {
+    "resumen": Value('i', 2),
+    "memoria": Value('i', 3),
+    "fds": Value('i', 5),
+    "threads": Value('i', 2),
+    "senales": Value('i', 10),
+    "scheduling": Value('i', 10),
+    "sistema": Value('i', 2),
+    }
+
     # lista de procesos (escalable: mañana agregás más analizadores acá)
     procesos = [
-        Process(target=analizador_resumen, args=(shared,)),
-        Process(target=analizador_memoria, args=(shared,)),
-        Process(target=analizador_senales, args=(shared,)),
-        Process(target=analizador_fds, args=(shared,)),
-        Process(target=analizador_threads, args=(shared,)),
-        Process(target=analizador_scheduling, args=(shared,)),
-        Process(target=analizador_sistema, args=(shared,)),
-        Process(target=display, args=(shared,)),
+        Process(target=analizador_resumen, args=(shared, intervalos["resumen"])),
+        Process(target=analizador_memoria, args=(shared, intervalos["memoria"])),
+        Process(target=analizador_senales, args=(shared, intervalos["senales"])),
+        Process(target=analizador_fds, args=(shared, intervalos["fds"])),
+        Process(target=analizador_threads, args=(shared, intervalos["threads"])),
+        Process(target=analizador_scheduling, args=(shared, intervalos["scheduling"])),
+        Process(target=analizador_sistema, args=(shared, intervalos["sistema"])),
+        Process(target=display, args=(shared, intervalos)),
     ]
 
     # lanzar TODOS
