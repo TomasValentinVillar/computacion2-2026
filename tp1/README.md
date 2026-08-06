@@ -22,11 +22,11 @@ Las 7 vistas son:
 
 | Tecla | Vista | Qué muestra |
 |-------|-------|-------------|
-| `1` / `r` | Resumen | PID, usuario, CPU%, threads, estado, comando |
-| `2` / `m` | Memoria | VmRSS, VmSize, page faults (minor/major) |
-| `3` / `s` | Señales | Máscaras de señales (bloqueadas, ignoradas, capturadas, pendientes) |
-| `4` / `f` | File descriptors | Cantidad y tipo de FDs abiertos por proceso |
-| `5` / `t` | Threads | Threads (LWPs) por proceso, CPU% por thread |
+| `1` / `r` | Resumen | PID, usuario, CPU%, threads, estado, comando completo |
+| `2` / `m` | Memoria | VmRSS, VmSize, VmData/Stk/Exe/Lib, segmentos (text/data/heap/stack/shared), page faults |
+| `3` / `f` | File descriptors | Cantidad y tipo de FDs abiertos por proceso |
+| `4` / `t` | Threads | Threads (LWPs) por proceso, CPU% por thread |
+| `5` / `s` | Señales | Máscaras de señales (bloqueadas, ignoradas, capturadas, pendientes) |
 | `6` / `p` | Scheduling | Prioridad, nice, política, context switches, affinity |
 | `7` / `g` | Sistema | Vista global: uptime, RAM, load, CPU global, top procesos |
 
@@ -256,6 +256,18 @@ compleja a la mitad. Es el patrón recomendado en clase 6.
   kernel (kthreadd, kworkers, etc.) muestran 0 descriptores. No es un error: los
   kthreads no tienen file descriptors de usuario, su `/proc/<pid>/fd/` está
   vacío. Los procesos normales sí muestran sus FDs correctamente.
+
+- **Resolución de usuario (UID → nombre):** se resuelve con `pwd.getpwuid()`
+  contra la base de usuarios **del contenedor**, no del host. Con `pid: host`
+  se ven procesos de UIDs del host que pueden no existir en `/etc/passwd` del
+  contenedor (o significar otro usuario); en ese caso se muestra el UID crudo
+  como fallback en vez de un nombre.
+
+- **Analizadores sin supervisor:** si un analizador muere (ej. `kill -9` a su
+  PID), el monitor no lo reinicia. El proceso padre no lo detecta porque solo
+  controla el flag `shared["seguir"]`, no la salud de cada hijo. El resto del
+  monitor sigue funcionando con normalidad, pero la vista de ese analizador
+  queda congelada con el último dato publicado (no crashea ni se vacía).
 
 ---
 

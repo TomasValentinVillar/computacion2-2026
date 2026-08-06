@@ -1,6 +1,12 @@
 import curses
 import signal
 
+# Intervalo minimo (segundos) permitido por vista al ajustar con '-' (segun consigna).
+MINIMOS = {
+    "resumen": 0.5, "memoria": 1, "fds": 2, "threads": 0.5,
+    "senales": 5, "scheduling": 5, "sistema": 1,
+}
+
 
 # ---------------------------------------------------------------------------
 # Funciones de dibujo: una por vista. Cada una recibe la pantalla, los datos
@@ -74,22 +80,25 @@ def ordenar_vista(vista_clave, datos, orden):
 
 def dibujar_resumen(stdscr, procesos, alto, ancho, seleccion, offset, filas_visibles, verbose):
     if verbose:
-        header = f"{'PID':>7} {'UID':>6} {'PPID':>7} {'CPU%':>6} {'THR':>4} {'ST':>3}  COMANDO"
+        header = f"{'PID':>7} {'USUARIO':>10} {'UID':>6} {'GID':>6} {'PPID':>7} {'CPU%':>6} {'THR':>4} {'ST':>3}  COMANDO"
     else:
-        header = f"{'PID':>7} {'UID':>6} {'CPU%':>6} {'THR':>4} {'ST':>3}  COMANDO"
+        header = f"{'PID':>7} {'USUARIO':>10} {'CPU%':>6} {'THR':>4} {'ST':>3}  COMANDO"
     stdscr.addstr(2, 0, header, curses.A_BOLD)
 
     visibles = procesos[offset : offset + filas_visibles]
     fila = 3
     for i, (pid, info) in enumerate(visibles):
         indice_real = offset + i
-        uid = info.get('Uid', '').split()[0] if info.get('Uid') else '?'
+        usuario = info.get('usuario', '?')
+        comando = info.get('cmdline') or info['comm']
         if verbose:
-            linea = (f"{pid:>7} {uid:>6} {info['PPid']:>7} {info['cpu']:>6.1f} "
-                     f"{info['Threads']:>4} {info['estado']:>3}  {info['comm']}")
+            uid = info.get('Uid', '').split()[0] if info.get('Uid') else '?'
+            gid = info.get('Gid', '').split()[0] if info.get('Gid') else '?'
+            linea = (f"{pid:>7} {usuario:>10} {uid:>6} {gid:>6} {info['PPid']:>7} {info['cpu']:>6.1f} "
+                     f"{info['Threads']:>4} {info['estado']:>3}  {comando}")
         else:
-            linea = (f"{pid:>7} {uid:>6} {info['cpu']:>6.1f} "
-                     f"{info['Threads']:>4} {info['estado']:>3}  {info['comm']}")
+            linea = (f"{pid:>7} {usuario:>10} {info['cpu']:>6.1f} "
+                     f"{info['Threads']:>4} {info['estado']:>3}  {comando}")
         if indice_real == seleccion:
             stdscr.addstr(fila, 0, linea[:ancho - 1], curses.A_REVERSE)
         else:
@@ -99,7 +108,9 @@ def dibujar_resumen(stdscr, procesos, alto, ancho, seleccion, offset, filas_visi
 
 def dibujar_memoria(stdscr, procesos, alto, ancho, seleccion, offset, filas_visibles, verbose):
     if verbose:
-        header = f"{'PID':>7} {'VmRSS':>12} {'VmSize':>12} {'VmHWM':>12} {'VmSwap':>10} {'minflt':>10} {'majflt':>8}  COMANDO"
+        header = (f"{'PID':>7} {'VmRSS':>10} {'VmSize':>10} {'VmHWM':>10} {'VmSwap':>9} "
+                  f"{'VmData':>9} {'VmStk':>7} {'VmExe':>7} {'VmLib':>7} "
+                  f"{'minflt':>8} {'majflt':>7}  SEGMENTOS(txt/dat/heap/pila/comp,KB)  COMANDO")
     else:
         header = f"{'PID':>7} {'VmRSS':>12} {'VmSize':>12} {'minflt':>10} {'majflt':>8}  COMANDO"
     stdscr.addstr(2, 0, header, curses.A_BOLD)
@@ -109,9 +120,15 @@ def dibujar_memoria(stdscr, procesos, alto, ancho, seleccion, offset, filas_visi
     for i, (pid, info) in enumerate(visibles):
         indice_real = offset + i
         if verbose:
-            linea = (f"{pid:>7} {info['VmRSS']:>12} {info['VmSize']:>12} "
-                     f"{info.get('VmHWM','?'):>12} {info.get('VmSwap','?'):>10} "
-                     f"{info['minflt']:>10} {info['majflt']:>8}  {info['comm']}")
+            # segmentos vienen en bytes desde /proc/<pid>/maps; se muestran en KB
+            seg = (f"{info.get('text',0)//1024}/{info.get('data',0)//1024}/"
+                   f"{info.get('heap',0)//1024}/{info.get('stack',0)//1024}/"
+                   f"{info.get('shared',0)//1024}")
+            linea = (f"{pid:>7} {info['VmRSS']:>10} {info['VmSize']:>10} "
+                     f"{info.get('VmHWM','?'):>10} {info.get('VmSwap','?'):>9} "
+                     f"{info.get('VmData','?'):>9} {info.get('VmStk','?'):>7} "
+                     f"{info.get('VmExe','?'):>7} {info.get('VmLib','?'):>7} "
+                     f"{info['minflt']:>8} {info['majflt']:>7}  {seg:<20}  {info['comm']}")
         else:
             linea = (f"{pid:>7} {info['VmRSS']:>12} {info['VmSize']:>12} "
                      f"{info['minflt']:>10} {info['majflt']:>8}  {info['comm']}")
@@ -216,7 +233,8 @@ def dibujar_threads(stdscr, procesos, alto, ancho, seleccion, offset, filas_visi
 
 def dibujar_scheduling(stdscr, procesos, alto, ancho, seleccion, offset, filas_visibles, verbose):
     if verbose:
-        header = f"{'PID':>7} {'PRIO':>5} {'NICE':>5} {'RT':>3} {'POLICY':>8} {'utime':>8} {'stime':>8} {'vol':>8} {'nonvol':>8}  COMANDO"
+        header = (f"{'PID':>7} {'PRIO':>5} {'NICE':>5} {'RT':>3} {'POLICY':>8} {'utime':>8} {'stime':>8} "
+                  f"{'vol':>8} {'nonvol':>8}  AFFINITY      COMANDO")
     else:
         header = f"{'PID':>7} {'PRIO':>5} {'NICE':>5} {'POLICY':>10} {'VOLUNTARY':>10} {'NONVOLUNTARY':>13} {'PGID':>7} {'SID':>7}  COMANDO"
     stdscr.addstr(2, 0, header, curses.A_BOLD)
@@ -226,10 +244,12 @@ def dibujar_scheduling(stdscr, procesos, alto, ancho, seleccion, offset, filas_v
     for i, (pid, info) in enumerate(visibles):
         indice_real = offset + i
         if verbose:
+            afin = ",".join(str(c) for c in sorted(info.get('affinity', [])))
             linea = (f"{pid:>7} {info['priority']:>5} {info['nice']:>5} "
                      f"{info.get('rt_priority','?'):>3} {info['policy']:>8} "
                      f"{info.get('utime','?'):>8} {info.get('stime','?'):>8} "
-                     f"{info['voluntary_ctxt_switches']:>8} {info['nonvoluntary_ctxt_switches']:>8}  {info['comm']}")
+                     f"{info['voluntary_ctxt_switches']:>8} {info['nonvoluntary_ctxt_switches']:>8}  "
+                     f"{afin:<12}  {info['comm']}")
         else:
             linea = (f"{pid:>7} {info['priority']:>5} {info['nice']:>5} "
                      f"{info['policy']:>10} {info['voluntary_ctxt_switches']:>10} "
@@ -376,9 +396,9 @@ def dibujar_ayuda(stdscr, alto, ancho, offset_ayuda):
         "VISTAS:",
         "  1 / r        Resumen",
         "  2 / m        Memoria",
-        "  3 / s        Senales",
-        "  4 / f        File descriptors",
-        "  5 / t        Threads",
+        "  3 / f        File descriptors",
+        "  4 / t        Threads",
+        "  5 / s        Senales",
         "  6 / p        Scheduling",
         "  7 / g        Sistema (global)",
         "",
@@ -423,9 +443,9 @@ def dibujar_ayuda(stdscr, alto, ancho, offset_ayuda):
 VISTAS = {
     ord('1'): ("RESUMEN",    "resumen"),
     ord('2'): ("MEMORIA",    "memoria"),
-    ord('3'): ("SENALES",    "senales"),
-    ord('4'): ("FDS",        "fds"),
-    ord('5'): ("THREADS",    "threads"),
+    ord('3'): ("FDS",        "fds"),
+    ord('4'): ("THREADS",    "threads"),
+    ord('5'): ("SENALES",    "senales"),
     ord('6'): ("SCHEDULING", "scheduling"),
     ord('7'): ("SISTEMA",    "sistema"),
     ord('r'): ("RESUMEN",    "resumen"),
@@ -475,7 +495,8 @@ def _loop(stdscr, shared, intervalos):
                 offset_ayuda = max(0, offset_ayuda - 1)
             continue
 
-        titulo = f"MONITOR DE PROCESOS - Vista: {vista_nombre}  [orden: {orden}]  [cada {intervalos[vista_clave].value}s]"
+        intervalo_str = f"{intervalos[vista_clave].value:g}"
+        titulo = f"MONITOR DE PROCESOS - Vista: {vista_nombre}  [orden: {orden}]  [cada {intervalo_str}s]"
         verbose = shared.get("verbose", False)
         if verbose:
             titulo += "  [VERBOSE]"
@@ -602,10 +623,13 @@ def _loop(stdscr, shared, intervalos):
                 seleccion = 0
                 offset = 0
             elif tecla == ord('+') or tecla == ord('='):    # '=' porque + suele ser shift+=
-                intervalos[vista_clave].value += 1
+                paso = 0.5 if MINIMOS[vista_clave] < 1 else 1
+                intervalos[vista_clave].value += paso
             elif tecla == ord('-'):
-                if intervalos[vista_clave].value > 1:        # no bajar de 1 segundo
-                    intervalos[vista_clave].value -= 1
+                paso = 0.5 if MINIMOS[vista_clave] < 1 else 1
+                nuevo = round(intervalos[vista_clave].value - paso, 1)
+                if nuevo >= MINIMOS[vista_clave]:            # no bajar del minimo de esta vista
+                    intervalos[vista_clave].value = nuevo
             elif tecla == 27:                        # ESC en modo normal: limpiar filtro
                 filtro = ""
                 seleccion = 0

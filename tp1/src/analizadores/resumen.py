@@ -1,7 +1,8 @@
 import os, time
 import signal
 
-from procfs import parsear_stat, parsear_status, leer_jiffies_sistema, calcular_cpu
+from procfs import (parsear_stat, parsear_status, leer_jiffies_sistema, calcular_cpu,
+                     leer_cmdline, resolver_usuario)
 
 # la bandera, visible para el handler y para el loop
 
@@ -32,14 +33,18 @@ def analizador_resumen(shared, intervalo):
                 stat = parsear_stat(pid)
                 cpu, jiffies_proc_ahora = calcular_cpu(pid, jiffies_ant_proc, jiffies_ant_sist, jiffies_sist_ahora)
                 status = parsear_status(pid)
+                uid = status['Uid'].split()[0]
                 resultado[pid] = {
                     'pid': stat['pid'],
                     'comm': stat['comm'],
+                    'cmdline': leer_cmdline(pid) or f"[{stat['comm']}]",
                     'estado': stat['estado'],
                     'cpu': cpu,
                     'Threads': status['Threads'],
                     'PPid': status['PPid'],
                     'Uid': status['Uid'],
+                    'Gid': status.get('Gid', ''),
+                    'usuario': resolver_usuario(uid),
                 }
                 nuevos_jiffies_proc[pid] = jiffies_proc_ahora
             except (FileNotFoundError, PermissionError, ProcessLookupError):

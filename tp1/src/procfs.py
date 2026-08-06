@@ -7,6 +7,7 @@ por eso viven acá y no dentro de un analizador puntual.
 
 import os
 import signal
+import pwd
 
 
 def parsear_stat(pid,tid=None):
@@ -110,7 +111,6 @@ def parsear_maps(pid):
 
     return grupos
 
-    import signal
 
 def decodificar_senales(mascara_hex):
     numero = int(mascara_hex, 16)
@@ -122,6 +122,26 @@ def decodificar_senales(mascara_hex):
             except ValueError:
                 señales.append(f"SIG{n}")    # nombre genérico si no es válida
     return señales
+
+def leer_cmdline(pid):
+    """Lee /proc/<pid>/cmdline (argv separado por bytes NUL) y arma el comando completo.
+    Los kernel threads (ej. kworker) tienen este archivo vacío, no tienen argv."""
+    with open(f"/proc/{pid}/cmdline", "rb") as f:
+        crudo = f.read()
+    if not crudo:
+        return ""
+    return " ".join(crudo.decode(errors="replace").split("\0")).strip()
+
+
+def resolver_usuario(uid):
+    """UID -> nombre de usuario via /etc/passwd. Si el UID no existe en la base
+    de usuarios (pasa seguido en contenedores con pid:host, ya que se resuelve
+    contra el /etc/passwd del contenedor y no del host), devuelve el UID crudo."""
+    try:
+        return pwd.getpwuid(int(uid)).pw_name
+    except (KeyError, ValueError):
+        return str(uid)
+
 
 def tipo_fd(destino):
     if destino.startswith("socket:"):

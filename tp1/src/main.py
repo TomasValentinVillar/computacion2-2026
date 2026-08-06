@@ -93,14 +93,15 @@ if __name__ == "__main__":
 
     # cargar intervalos desde config.json (o defaults)
     inter = cargar_config()
+    # 'd' (double) y no 'i' porque resumen/threads admiten intervalos de 0.5s (ver MINIMOS en display.py)
     intervalos = {
-        "resumen": Value('i', inter.get("resumen", 2)),
-        "memoria": Value('i', inter.get("memoria", 3)),
-        "fds": Value('i', inter.get("fds", 5)),
-        "threads": Value('i', inter.get("threads", 2)),
-        "senales": Value('i', inter.get("senales", 10)),
-        "scheduling": Value('i', inter.get("scheduling", 10)),
-        "sistema": Value('i', inter.get("sistema", 2)),
+        "resumen": Value('d', inter.get("resumen", 2)),
+        "memoria": Value('d', inter.get("memoria", 3)),
+        "fds": Value('d', inter.get("fds", 5)),
+        "threads": Value('d', inter.get("threads", 2)),
+        "senales": Value('d', inter.get("senales", 10)),
+        "scheduling": Value('d', inter.get("scheduling", 10)),
+        "sistema": Value('d', inter.get("sistema", 2)),
     }
 
     procesos = [
