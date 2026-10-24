@@ -1,0 +1,5 @@
+services:
+  api:                        # nombre del servicio
+    build: .                  # construir la imagen con el Dockerfile de esta carpeta
+    ports:
+      - "8000:8000"           # puerto_host:puerto_contenedor -> la API queda accesible desde el host

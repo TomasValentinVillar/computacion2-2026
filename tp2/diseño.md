@@ -30,7 +30,7 @@ los endpoints y los workers comparten los dicts directamente.
 | `id` | `7` | POST |
 | `tipo` | `"descargar"` / `"hashear"` / `"esperar"` | POST |
 | `parametros` | `{"segundos": 5}` (solo las claves de su tipo) | POST |
-| `timeout` | `10` | POST |
+| `timeout` | `30` (default, `> 0`) | POST |
 | `estado` | `"pendiente"` | POST, worker, DELETE |
 | `resultado` | `None` → `"esperé 5s"` | worker |
 | `error` | `None` → `"timeout tras 10s"` | worker |
@@ -42,9 +42,11 @@ Parámetros por tipo:
 
 | Tipo | Parámetros |
 |---|---|
-| `descargar` | `urls`: lista de URLs |
-| `hashear` | `texto`, `iteraciones` |
-| `esperar` | `segundos` |
+| `descargar` | `urls`: lista de URLs válidas, entre 1 y 50 |
+| `hashear` | `texto`, `iteraciones` (1 a 20 millones) |
+| `esperar` | `segundos` (> 0) |
+
+Validación: un modelo Pydantic por tipo con `discriminator='tipo'` (ver `src/modelos.py`).
 
 Tiempos derivados:
 - **espera en cola** = `iniciada - creada`

@@ -11,3 +11,5 @@ __pycache__/
 # OS
 .DS_Store
 dump_*.json
+# TP2: volcados del apagado ordenado
+estado_*.json
