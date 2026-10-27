@@ -99,6 +99,145 @@ pudo haberla cancelado en el medio.
 **`tareas` guarda TODAS las tareas**, en cualquier estado. No hay "lista de
 pendientes": `pendiente` es el valor del campo `estado`. La cola es otra cosa.
 
+## Endpoints (main.py)
+
+**POST → 202 con la tarea recién creada** (id + `pendiente`), sin resultado: el
+cliente lo consulta después con GET /tareas/{id}. Valores iniciales: `None` para
+lo que todavía no pasó (resultado, error, iniciada, finalizada); `creada =
+time.time()` (número simple, se vuelca directo al JSON).
+`parametros` se guarda con `model_dump(mode='json')`: las HttpUrl pasan a str,
+así el dict es serializable para el volcado.
+
+**La validación sale de las anotaciones de tipo, no de una línea de código**:
+FastAPI lee la firma del endpoint (`nueva: TareaNueva`, `estado_filtro: Estado`) y
+valida ANTES de llamar a la función. Si falla, responde 422 y la función ni se
+ejecuta. Pydantic además NORMALIZA: "https://example.com" se guarda como
+"https://example.com/".
+
+**HTTPException(404) y no `return {"error": ...}`**: el return respondería 200, y un
+programa (script, test, medición) mira el código antes que el cuerpo → creería
+que salió bien. El código HTTP tiene que decir la verdad por sí solo.
+
+**GET /tareas?estado=X**: el filtro va en el query string. `Estado` es un Literal de
+los 5 estados → "bailando" da 422 solo. Colección vacía → 200 con `[]`, no 404: la
+colección existe aunque no tenga elementos; 404 es para UN recurso que no existe.
+El parámetro se llama `estado_filtro` con `alias='estado'`: si se llamara `estado`
+taparía al módulo `estado` adentro de la función (sombreado).
+
+## Cola y workers (workers.py)
+
+**asyncio.Queue y no queue.Queue**: `queue.Queue.get()` con la cola vacía bloquea
+el HILO, o sea el event loop entero. El worker espera un item que solo un POST
+puede poner, pero el POST no puede ejecutarse → deadlock, todo congelado.
+`await cola.get()` suspende solo esa corrutina y el loop sigue atendiendo.
+
+**En la cola van ids, no dicts**: una sola fuente de verdad (`estado.tareas`) y el
+worker ve el estado ACTUAL al sacarla. (Ojo: meter el dict también "andaría",
+porque la cola guarda una REFERENCIA al mismo objeto, no una copia. Con
+multiprocessing.Queue sí sería una copia: se picklea a otra memoria.)
+
+**Workers en el lifespan**: `create_task` necesita un loop corriendo, y al importar
+el módulo no lo hay. `lifespan` es un context manager async: antes del yield =
+arranque (loop ya corriendo, antes del primer pedido), después = apagado.
+Se guardan los Task en `_workers` para poder cancelarlos al apagar.
+
+**N_WORKERS por variable de entorno** (default 4): configurable sin tocar código
+(sirve para la medición 3). `int()` porque las variables de entorno son strings.
+
+**Dentro del worker**:
+- tarea `cancelada` mientras estaba en cola → `continue` (no se puede sacar un
+  elemento del medio de una asyncio.Queue; se saltea al sacarla).
+- `task_done()` en un `finally`: se llama pase lo que pase. Verificado: el finally
+  corre también con `continue`. Si faltara un task_done, `cola.join()` del apagado
+  esperaría para siempre.
+- `except Exception`: una tarea que falla no mata al worker. Sin eso, la excepción
+  rompe el `while True` y se pierde un worker en silencio.
+- `ejecutar()` hace el trabajo y devuelve el resultado; el worker administra el
+  estado. Separación de responsabilidades.
+
+**Timeout = cancelación con reloj**: `async with asyncio.timeout(N)` cancela lo de
+adentro al vencer (CancelledError en el await donde está parada) y al salir lo
+convierte en TimeoutError.
+
+**Verificado** con 4 workers, 6 `esperar` de 2 s y uno de 3 s con timeout 1:
+- t=0.3 s: exactamente 4 ejecutando (uno por worker), 3 pendientes.
+- Las 4 primeras terminaron a los ~2 s, NO a los 8 s.
+- Las 5-7 estuvieron ~1.9 s en cola (esperando que se libere un worker).
+- La 7 duró exactamente 1.00 s y quedó `fallida: timeout: superó 1.0 s`.
+Sin las tres marcas de tiempo no se vería la espera en cola.
+
+**Concurrencia ≠ paralelismo**: con un hilo nunca se ejecutan dos líneas a la vez.
+Los 4 workers llegan a su `await sleep(2)` uno tras otro en microsegundos y
+después los 4 ESPERAN a la vez. Se superponen las esperas, no la ejecución → sirve
+para I/O (esperar, descargar), no para CPU (hashear).
+
+## DELETE y cancelación de una tarea en ejecución
+
+**No se cancela al worker**: `CancelledError` hereda de BaseException, NO de
+Exception, a propósito (si un `except Exception` genérico se tragara las
+cancelaciones, nada se podría cancelar). Nuestro `except Exception` no lo atrapa:
+sube, corre el finally, rompe el `while True` → se pierde el worker.
+
+**Cada ejecución corre en su propio Task** (`create_task(ejecutar(tarea))`), guardado
+en `estado.en_ejecucion[tid]`. El DELETE cancela ESE Task; el worker sigue vivo.
+El `await t` del worker también recibe CancelledError → hay que distinguir:
+`asyncio.current_task().cancelling()` = pedidos de cancelación contra el WORKER.
+- 0 → cancelaron solo la tarea (DELETE) → marcar `cancelada` y seguir.
+- >0 → cancelaron al worker (apagado) → `raise` y morir.
+`raise` sin argumentos relanza la misma excepción: lo que sigue NO se ejecuta.
+
+**DELETE pone `cancelada` él mismo**: `.cancel()` solo PIDE; el CancelledError le
+llega a la tarea recién cuando el loop la retoma, o sea DESPUÉS de que el DELETE
+responde (no tiene await entre cancel() y return). `cancel()` devuelve False si el
+Task ya terminó → 409.
+
+**Verificado** (1 worker): DELETE de pendiente → 200, el worker la saltea
+(`iniciada` queda None); DELETE en ejecución → 200 y el worker toma la siguiente;
+DELETE de completada → 409; inexistente → 404; el worker sigue vivo después.
+Apagado con una tarea corriendo → cierre limpio (gather con return_exceptions).
+
+**PENDIENTE para el apagado**: con el `raise`, una tarea que estaba ejecutando al
+apagar queda en `ejecutando` (nadie la marca) → el JSON mentiría.
+
+## hashear y el executor (medición 2)
+
+**`await` no crea concurrencia**: solo marca dónde la corrutina PODRÍA ceder. Una
+función `async def` que adentro solo calcula se ejecuta de corrido igual. Con el
+hash en el hilo del loop, se congela TODO (GETs, otros workers y hasta el reloj de
+asyncio.timeout, que también lo maneja el loop). Mismo bug que time.sleep().
+
+**`run_in_executor(pool, funcion, args)`**: manda la función a otro hilo/proceso y
+devuelve un future; el `await` suspende solo a esa corrutina y el loop sigue.
+`hashear` es una función común a nivel de módulo: el ProcessPoolExecutor la
+picklea POR NOMBRE para mandarla al otro proceso.
+
+**MODO_CPU configurable** (proceso / thread / bloqueante) para poder medir las tres.
+
+**Medición** (`mediciones/medir_cpu.py`): 4 hashes de 5M iteraciones a la vez,
+GET /tareas cada 0.1 s mientras tanto. 8 núcleos.
+
+| MODO_CPU   | total  | GETs en el lapso | latencia GET prom. | peor   |
+|------------|--------|------------------|--------------------|--------|
+| bloqueante | 14.2 s | 1                | 3535 ms            | 3535 ms|
+| thread     | 33.5 s | 73               | 357 ms             | 1279 ms|
+| proceso    | 4.1 s  | 40               | 2.0 ms             | 3.6 ms |
+
+Hipótesis vs resultado:
+- thread, ¿responde el GET? Dije sí → a medias (357 ms prom., hasta 1.3 s).
+- thread, total: dije ~4× (secuencial) → PEOR: 33.5 s, más del doble que bloqueante.
+- proceso: dije que responde y ~1× → acerté las dos.
+
+Interpretación:
+- **bloqueante**: el servidor estuvo sordo 14 s. El único GET entró en el hueco
+  entre un hash y el siguiente → tardó lo que un hash (14.2/4 ≈ 3.5 s).
+- **thread**: el GIL deja correr un hilo a la vez Y además cada traspaso cuesta.
+  5 hilos (4 del pool + el del loop) se pelean el GIL; Python obliga a soltarlo
+  cada 5 ms (sys.getswitchinterval()), cada traspaso = despertar otro hilo
+  (context switch) en otro núcleo con la caché fría. Miles de traspasos = los
+  19 s extra. Para CPU-bound, threads son PEORES que nada: solo evitan congelar
+  del todo el loop.
+- **proceso**: un GIL por proceso → paralelismo real. 4 hashes tardan lo que 1.
+
 ## Apagado ordenado (diseño)
 
 Docker manda SIGTERM, espera 10 s y manda SIGKILL. SIGKILL mata el proceso entero:

@@ -11,6 +11,8 @@ MAX_ITERACIONES = 20_000_000   # ~20 s de CPU
 MAX_URLS = 50                  # la medición 1 pide 20 descargas concurrentes
 TIMEOUT_DEFAULT = 30           # cubre un hashear de MAX_ITERACIONES con margen
 
+Estado = Literal['pendiente', 'ejecutando', 'completada', 'fallida', 'cancelada']
+
 
 # --- Parámetros: uno por tipo, con sus restricciones ---
 
