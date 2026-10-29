@@ -21,8 +21,8 @@ cola: asyncio.Queue[int] = asyncio.Queue()
 _workers: list[asyncio.Task] = []
 
 
-async def ejecutar(tarea: dict) -> str:
-    """Hace el trabajo según el tipo. PROVISORIO: descargar es falso."""
+async def ejecutar(tarea: dict) -> str | list[dict]:
+    """Hace el trabajo según el tipo y devuelve el resultado."""
     p = tarea['parametros']
     if tarea['tipo'] == 'esperar':
         return await tareas.esperar(p['segundos'])
@@ -34,8 +34,13 @@ async def ejecutar(tarea: dict) -> str:
         # SOLO a esta corrutina mientras el pool calcula; el loop sigue.
         return await loop.run_in_executor(
             _pool, tareas.hashear, p['texto'], p['iteraciones'])
-    await asyncio.sleep(1)   # simulación hasta que exista en tareas.py
-    return f"{tarea['tipo']} simulado"
+    # descargar
+    resultados = await tareas.descargar(p['urls'])
+    if all('error' in r for r in resultados):
+        # Ninguna respondió: la tarea no logró nada → except Exception → 'fallida'
+        raise RuntimeError(f"fallaron las {len(resultados)} URLs; "
+                           f"primera: {resultados[0]['error']}")
+    return resultados
 
 
 async def worker(n: int):

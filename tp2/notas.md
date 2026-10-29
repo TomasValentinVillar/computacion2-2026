@@ -238,6 +238,54 @@ Interpretación:
   del todo el loop.
 - **proceso**: un GIL por proceso → paralelismo real. 4 hashes tardan lo que 1.
 
+## descargar (httpx) y medición 1
+
+**httpx y no aiohttp**: es el que usamos en la clase 20, y su API es la de requests
+(`r = await cliente.get(url)`). La ventaja de rendimiento de aiohttp aparece con
+miles de conexiones; con 20-50 URLs por tarea no se nota → gana la API simple.
+
+**Cada URL reporta lo suyo; la tarea no falla por una URL** (opción B):
+- un 404 o un 500 NO es un error nuestro: es una RESPUESTA válida del remoto → se
+  reporta `codigo: 404`.
+- sin respuesta (DNS, conexión rechazada, timeout de esa URL) → `error` en esa
+  URL, las demás siguen. Solo se atrapa `httpx.HTTPError`: CancelledError sube.
+- `fallida` si: fallan TODAS (la tarea no logró nada) o vence el timeout de la tarea.
+`TIMEOUT_POR_URL = 10`: una URL colgada no arrastra a las otras.
+
+**Un cliente por tarea en `async with`**: al cancelar (DELETE/timeout/apagado), el
+CancelledError sale del bloque y el cliente cierra sus conexiones.
+Verificado con `ss -tnp`: 2 conexiones establecidas a httpbin a mitad de una
+descarga de 8 s → DELETE → 0 conexiones. Nada queda abierto.
+
+**gather vs for con await** (prueba con 4 URLs: 0.63 + 0.78 + 0.80 + 2.77 s):
+- gather: lanza todas, cada una se suspende en su `await cliente.get()`, las
+  esperas se superponen → total = la más lenta (2.87 s).
+- for con await: espera que TERMINE cada una antes de EMPEZAR la siguiente →
+  total = la suma (~5 s).
+
+**Medición 1** (`mediciones/medir_io.py`, httpbin.org/delay/1 = ~1 s por diseño):
+
+| caso                                          | total  | con 200 |
+|-----------------------------------------------|--------|---------|
+| secuencial (1 worker, 20 tareas de 1 URL)     | 40.4 s | 20/20   |
+| concurrente (1 tarea, 20 URLs con gather)     | 3.5 s  | 20/20   |
+| concurrente por pool (20 workers, 20 tareas)  | 2.2 s  | 18-20/20 (429) |
+
+Speedup secuencial → gather: 40.4 / 3.5 ≈ 11.6×.
+
+Interpretación:
+- **No llega a 20×** porque el cuello de botella es el REMOTO, no mi compu: una URL
+  que tarda 1 s por diseño tardó 1.9-3.3 s con 20 a la vez. httpbin es público y
+  compartido. Mi CPU solo esperaba (I/O puro). En I/O-bound, el techo lo pone el
+  otro extremo (servidor y red).
+- **Secuencial: mínimo 1.64 s por descarga, no 1 s**: cada tarea crea su cliente y
+  paga DNS + handshake TCP + handshake TLS antes del primer byte (clases 12-13).
+  Mejora posible: un cliente compartido con keep-alive. → limitación conocida.
+- **429 Too Many Requests** con 20 workers: rate limit del remoto, dirigido a MI IP
+  ("frená"). No es 503 (sobrecarga general). Más concurrencia contra un mismo host
+  no siempre es mejor → se limita con un Semaphore (bonus rate limiting).
+  El sistema lo reportó como dato de esa URL, sin romper la tarea.
+
 ## Apagado ordenado (diseño)
 
 Docker manda SIGTERM, espera 10 s y manda SIGKILL. SIGKILL mata el proceso entero:
