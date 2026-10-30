@@ -2,17 +2,18 @@
 
 ## Para repasar al empezar la próxima sesión
 
-(se completa al cerrar la sesión 29/10)
+(se completa al cerrar la sesión)
 
 ## Para el próximo bloque
 
-- Apagado ordenado: SIGTERM/SIGINT, esperar máx. 8 s, marcar canceladas las que
-  quedaron `ejecutando`/`pendiente`, volcar estado_<timestamp>.json, reportar al arrancar
-- Un hash en un proceso del pool NO se corta con cancel()/timeout: ¿qué hacemos?
 - `/estadisticas` y medición 3 (techo del pool)
 
 ### Repasados
 
+- [x] (29/10 tarde) async with cierra conexiones, except específico (bugs a la vista),
+      DNS → TCP → TLS
+- [x] Sólidos sin repaso (sesión 29/10): gather vs for con await, 404 como respuesta
+      válida, cuello de botella en el remoto, 429 vs 503
 - [x] (29/10) create_task guardado, timeout = cancel con reloj, CancelledError fuera de
       Exception, cancelling(), run_in_executor, pickle por nombre, GIL thread vs proceso
 - [x] (26/10) Recorrido del POST, 404 vs return error, validación por anotaciones, deadlock de queue.Queue
@@ -36,6 +37,6 @@
   → la saltea con `continue` (ver notas.md "Cola y workers")
 - ~~Si cancelo una tarea a mitad de una descarga, ¿qué pasa con la conexión abierta?~~
   → el `async with` del cliente la cierra; verificado con `ss` (2 → 0 conexiones)
-- ¿Usamos los handlers de señales de uvicorn o ponemos los nuestros para el apagado?
+- ~~¿Usamos los handlers de señales de uvicorn o los nuestros?~~ → los nuestros (503)
 - ~~Cliente HTTP para `descargar`: ¿`httpx` o `aiohttp`?~~ → httpx (ver notas.md)
 - ¿`extra='forbid'` en los modelos para rechazar campos que sobran, o dejarlos pasar?

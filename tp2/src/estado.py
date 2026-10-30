@@ -11,6 +11,9 @@ tareas: dict[int, dict] = {}
 # es lo que necesita el DELETE para llamar a .cancel().
 en_ejecucion: dict[int, asyncio.Task] = {}
 
+# True desde que llega SIGTERM/SIGINT: el POST deja de aceptar tareas (503).
+apagando = False
+
 _ultimo_id = 0
 
 

@@ -305,6 +305,72 @@ es CUÁNDO se escribe, no CÓMO. Orden:
 `pendiente` sería mentir. (Si hubiera un bonus de "reanudar al reiniciar", ahí sí
 tendría sentido dejarlas pendientes.)
 
+## Apagado ordenado (implementación)
+
+**Handlers propios con `loop.add_signal_handler`** (opción B, la que nombra la
+consigna) en vez de los de uvicorn (opción A). Con A, un POST durante el apagado
+recibe "connection refused" (uvicorn cierra el socket); con B recibe **503 Service
+Unavailable + Retry-After**: "ahora no puedo atenderte". 503 y no 4xx: el problema
+es del servidor, y es temporal.
+uvicorn instala sus handlers (signal.signal) ANTES del lifespan (verificado en su
+código: `capture_signals()` envuelve al startup) → los nuestros, instalados en el
+lifespan, los reemplazan.
+`add_signal_handler` corre el handler EN el loop (no en el medio de cualquier
+línea como signal.signal): puede crear tasks sin problema.
+
+**Secuencia** (`al_recibir_senal` → task `apagar()`):
+1. `apagando = True` → POST responde 503
+2. pendientes → `cancelada` (error "apagado del servidor"); los workers las saltean
+3. `asyncio.wait(en_ejecucion, timeout=8)`
+4. las que no terminaron → `.cancel()` sobre SU Task (como el DELETE): el worker las
+   marca `cancelada` → ninguna queda `ejecutando` en el JSON (resuelve el pendiente)
+5. cancelar los workers (ya ociosos) y cerrar el pool
+6. volcar `estado_<timestamp>.json`
+7. `servidor.should_exit = True` → recién ahí uvicorn deja de escuchar y sale
+Para tener `servidor`, el __main__ usa `uvicorn.Server(Config(...))` en vez de
+`uvicorn.run()`. Una segunda señal durante el apagado se ignora (se loguea).
+
+**Volumen** `./datos:/app/datos`: el JSON se escribe en una carpeta del HOST montada
+en el contenedor. `docker compose down` borra el contenedor (y su sistema de
+archivos), no tu carpeta → el contenedor nuevo encuentra el volcado y lo reporta.
+(No es como `pid: host` del TP1: aquello compartía el espacio de PIDs; esto monta
+una carpeta.)
+
+**BUG encontrado midiendo: el proceso tardaba 10.5-11.6 s en salir** (Docker lo
+habría matado con SIGKILL). El volcado se hacía a los 8.00 s, uvicorn terminaba a
+los 8.17 s... y el proceso vivía 2.5 s más, SOLO si había un hash corriendo.
+Diagnóstico:
+- script mínimo sin servidor: `terminate()` mataba al hijo al instante (1.4 s).
+- volcado de stacks con faulthandler durante el cuelgue: el hilo principal en
+  `_python_exit → join()` esperando al manager del pool, y el manager en `select()`
+  esperando que el proceso del hash termine → el hijo seguía vivo pese al terminate.
+- causa: con **fork, el hijo HEREDA los handlers** del padre. El pool hace fork
+  DESPUÉS de que instalamos `add_signal_handler(SIGTERM)`, cuyo handler solo
+  despierta al loop del padre. En el hijo no hay loop: SIGTERM queda en la nada y
+  `terminate()` (= mandar SIGTERM) no hace nada.
+Arreglo: `ProcessPoolExecutor(initializer=_preparar_proceso_del_pool)`, que en cada
+hijo pone **SIGINT → ignorar** (Ctrl+C le llega a todo el grupo de procesos; decide
+el padre, igual que en el TP1) y **SIGTERM → por defecto** (morir, para que el padre
+los pueda terminar). Ignorar SIGTERM en los hijos habría sido el mismo bug.
+Además, un hash ya arrancado NO se corta con cancel()/timeout (el future de asyncio
+se cancela, pero el proceso sigue calculando) → al apagar se terminan los procesos
+a mano (`_pool._processes`, privado; Python 3.14 trae `terminate_workers()`).
+
+**Verificado**:
+- local, 3 workers (esperar 3 / esperar 20 / hashear 15M / 1 pendiente) + SIGTERM:
+  POST durante el apagado → 503; volcado a los 8.00 s con completada / cancelada /
+  cancelada / cancelada("apagado del servidor"); sin procesos del pool vivos.
+- salida del proceso con un hash corriendo: 10.5-11.6 s → **8.43 s** con el arreglo.
+- Docker: `docker compose stop` 8.79 s (sin SIGKILL), JSON en `tp2/datos/` del host,
+  y tras `down` + `up` el log dice "volcado previo: estado_..._001417.json
+  (3 tareas: {'completada': 1, 'cancelada': 2})".
+- Limitación menor: el nombre del archivo usa la hora del contenedor (UTC).
+
+**Arquitectura de procesos** (aclaración): "un proceso y un hilo" vale para el
+event loop, donde vive TODO el estado (API, workers, dict, cola). Los procesos del
+ProcessPoolExecutor son "calculadoras": reciben (texto, iteraciones) por pickle y
+devuelven un string. No tocan el dict ni la cola → no hace falta Manager.
+
 ## Docker
 
 **host 0.0.0.0 y no 127.0.0.1**: 127.0.0.1 es el loopback DEL CONTENEDOR; el curl
