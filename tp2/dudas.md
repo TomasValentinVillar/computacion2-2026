@@ -2,14 +2,26 @@
 
 ## Para repasar al empezar la próxima sesión
 
-(se completa al cerrar la sesión)
+- [ ] `put_nowait` vs `await put` con la cola llena: 503 inmediato o el cliente colgado
+- [ ] Chequear `cola.full()` ANTES de crear la tarea (y por qué no hace falta Lock hasta el put_nowait)
+- [ ] `signal.getsignal()`: guardar el handler que pisamos para devolverle la señal al final
 
 ## Para el próximo bloque
 
-- `/estadisticas` y medición 3 (techo del pool)
+- Revisar el borrador del README y escribir la sección 7 ("Lo que aprendí")
+- Limpieza final (código, notas.md, README raíz del repo) + prueba completa en Docker
+- Bonus si sobra tiempo: tests con pytest-asyncio (cancelación)
 
 ### Repasados
 
+- [x] (30/10 tarde) tres estados de una señal, un handler por señal (el último gana),
+      backpressure con put_nowait vs await put
+- [x] Sólidos sin repaso (sesión 30/10): promedios de /estadisticas, hyperthreading y
+      núcleos físicos, crecimiento lineal, cola interna del pool, saturación de la entrada
+- [x] (30/10) add_signal_handler vs signal.signal, orden de instalación de handlers
+      (el último gana), SIG_DFL/SIG_IGN/manejada, pool sin estado compartido
+- [x] Sólidos sin repaso (sesión 29/10 tarde): 503 vs connection refused, los 7 pasos del
+      apagado, volumen, fork hereda handlers, hash arrancado no se corta con cancel()
 - [x] (29/10 tarde) async with cierra conexiones, except específico (bugs a la vista),
       DNS → TCP → TLS
 - [x] Sólidos sin repaso (sesión 29/10): gather vs for con await, 404 como respuesta

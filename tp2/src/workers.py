@@ -17,8 +17,12 @@ N_WORKERS = int(os.environ.get('N_WORKERS', 4))
 MODO_CPU = os.environ.get('MODO_CPU', 'proceso')
 _pool: Executor | None = None
 
+# Backpressure: con la cola llena el POST responde 503 en vez de acumular sin
+# límite (medición 3: ~1.7 KB por tarea; un millón encoladas ≈ 1.7 GB).
+MAX_COLA = int(os.environ.get('MAX_COLA', 1000))
+
 # En la cola van solo ids: la única fuente de verdad es estado.tareas.
-cola: asyncio.Queue[int] = asyncio.Queue()
+cola: asyncio.Queue[int] = asyncio.Queue(maxsize=MAX_COLA)
 _workers: list[asyncio.Task] = []
 
 

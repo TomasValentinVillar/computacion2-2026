@@ -3,6 +3,7 @@ import asyncio
 import signal
 import time
 from contextlib import asynccontextmanager
+from typing import get_args
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query
@@ -15,7 +16,7 @@ from modelos import Estado, TareaNueva
 LIMITE_APAGADO = 8   # Docker manda SIGKILL a los 10 s del SIGTERM: margen para volcar
 
 log = persistencia.log
-servidor: uvicorn.Server | None = None   # lo crea el __main__; el handler le pide salir
+_handlers_uvicorn: dict[signal.Signals, object] = {}   # los que pisamos, para devolverles la posta
 _apagado: asyncio.Task | None = None
 
 
@@ -29,16 +30,20 @@ def al_recibir_senal(sig: signal.Signals):
         return
     estado.apagando = True        # desde acá el POST responde 503
     log.info(f'{sig.name} recibida: apagado ordenado (límite {LIMITE_APAGADO} s)')
-    _apagado = asyncio.create_task(apagar())
+    _apagado = asyncio.create_task(apagar(sig))
 
 
-async def apagar():
+async def apagar(sig: signal.Signals):
     t0 = time.perf_counter()
     await workers.detener(LIMITE_APAGADO)
     ruta = persistencia.volcar(estado.tareas)
     log.info(f'estado volcado en {ruta} ({time.perf_counter() - t0:.2f} s)')
-    if servidor is not None:
-        servidor.should_exit = True   # recién ahora uvicorn deja de escuchar y sale
+    # Recién ahora le pasamos la señal al handler de uvicorn que habíamos pisado:
+    # es el que le dice a uvicorn que deje de escuchar y salga. Así anda igual con
+    # `python main.py` (Docker) que con `uvicorn main:app [--reload]`.
+    handler = _handlers_uvicorn.get(sig)
+    if callable(handler):
+        handler(sig, None)
 
 
 @asynccontextmanager
@@ -47,9 +52,11 @@ async def ciclo(app):
     persistencia.reportar_volcado_previo()
     workers.iniciar()
     loop = asyncio.get_running_loop()
-    # uvicorn ya instaló sus handlers (signal.signal) antes del lifespan:
-    # estos los reemplazan.
+    # uvicorn ya instaló sus handlers (signal.signal) antes del lifespan: un
+    # proceso tiene UN handler por señal, así que los nuestros los reemplazan.
+    # Guardamos los de uvicorn para llamarlos cuando termine nuestro apagado.
     for sig in (signal.SIGTERM, signal.SIGINT):
+        _handlers_uvicorn[sig] = signal.getsignal(sig)
         loop.add_signal_handler(sig, al_recibir_senal, sig)
     yield
     # Después del yield: uvicorn se está yendo. Si fue por nuestra señal, el
@@ -77,6 +84,13 @@ async def crear_tarea(nueva: TareaNueva):
         # 503 = "ahora no puedo atenderte" (error del servidor, temporal)
         raise HTTPException(status_code=503, detail='El servidor se está apagando',
                             headers={'Retry-After': '30'})
+    # Backpressure. Se chequea ANTES de crear la tarea (si no, quedaría 'pendiente'
+    # en el dict sin estar en la cola). Entre este full() y el put_nowait() no hay
+    # ningún await: nadie puede llenar la cola en el medio.
+    if workers.cola.full():
+        raise HTTPException(status_code=503,
+                            detail=f'Cola llena ({workers.MAX_COLA} tareas esperando)',
+                            headers={'Retry-After': '5'})
     tid = estado.nuevo_id()
     tarea = {
         'id': tid,
@@ -92,7 +106,9 @@ async def crear_tarea(nueva: TareaNueva):
         'finalizada': None,
     }
     estado.tareas[tid] = tarea
-    workers.cola.put_nowait(tid)   # sin await: la cola no tiene límite, nunca espera
+    # put_nowait y no `await put`: con la cola llena, `await put` dejaría al cliente
+    # colgado esperando lugar (y el POST tiene que responder ya)
+    workers.cola.put_nowait(tid)
     return tarea
 
 
@@ -110,6 +126,49 @@ async def obtener_tarea(tid: int):
     if tid not in estado.tareas:
         raise HTTPException(status_code=404, detail=f'No existe la tarea {tid}')
     return estado.tareas[tid]
+
+
+def _promedio(valores: list[float]) -> float | None:
+    return round(sum(valores) / len(valores), 3) if valores else None
+
+
+def _tiempos(tareas: list[dict]) -> dict:
+    """Promedios de un grupo de tareas. Cada tiempo usa SOLO las que lo tienen válido:
+    - espera en cola: toda tarea que arrancó (también fallidas y canceladas en
+      ejecución: esperaron igual). Las que nunca arrancaron no tienen el dato.
+    - ejecución: solo las completadas. Una fallida por timeout tiene los números,
+      pero su "ejecución" es el timeout: dice cuándo la cortamos, no cuánto cuesta.
+    """
+    arrancadas = [t for t in tareas if t['iniciada'] is not None]
+    completadas = [t for t in tareas if t['estado'] == 'completada']
+    return {
+        'espera_en_cola': _promedio([t['iniciada'] - t['creada'] for t in arrancadas]),
+        'ejecucion': _promedio([t['finalizada'] - t['iniciada'] for t in completadas]),
+        'completadas': len(completadas),
+    }
+
+
+@app.get('/estadisticas')
+async def estadisticas():
+    todas = list(estado.tareas.values())
+    por_estado = {e: 0 for e in get_args(Estado)}
+    for t in todas:
+        por_estado[t['estado']] += 1
+    tipos = sorted({t['tipo'] for t in todas})
+    return {
+        'total': len(todas),
+        'por_estado': por_estado,
+        'workers': {
+            'total': workers.N_WORKERS,
+            # cada worker ocupado tiene exactamente una ejecución en curso
+            'ocupados': len(estado.en_ejecucion),
+        },
+        'tiempos_promedio_s': {
+            'general': _tiempos(todas),
+            'por_tipo': {tipo: _tiempos([t for t in todas if t['tipo'] == tipo])
+                         for tipo in tipos},
+        },
+    }
 
 
 @app.delete('/tareas/{tid}')
@@ -141,6 +200,4 @@ async def cancelar_tarea(tid: int):
 # ProcessPoolExecutor re-importan este módulo y sin ella arrancarían
 # otro servidor cada uno.
 if __name__ == '__main__':
-    # Server en vez de uvicorn.run(): necesitamos la referencia para should_exit
-    servidor = uvicorn.Server(uvicorn.Config(app, host='0.0.0.0', port=8000))
-    servidor.run()
+    uvicorn.run(app, host='0.0.0.0', port=8000)

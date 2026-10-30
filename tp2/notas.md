@@ -148,8 +148,8 @@ Se guardan los Task en `_workers` para poder cancelarlos al apagar.
 - tarea `cancelada` mientras estaba en cola → `continue` (no se puede sacar un
   elemento del medio de una asyncio.Queue; se saltea al sacarla).
 - `task_done()` en un `finally`: se llama pase lo que pase. Verificado: el finally
-  corre también con `continue`. Si faltara un task_done, `cola.join()` del apagado
-  esperaría para siempre.
+  corre también con `continue`. Si faltara un task_done, la cuenta de la cola
+  quedaría desfasada y un `cola.join()` esperaría para siempre.
 - `except Exception`: una tarea que falla no mata al worker. Sin eso, la excepción
   rompe el `while True` y se pierde un worker en silencio.
 - `ejecutar()` hace el trabajo y devuelve el resultado; el worker administra el
@@ -196,8 +196,9 @@ Task ya terminó → 409.
 DELETE de completada → 409; inexistente → 404; el worker sigue vivo después.
 Apagado con una tarea corriendo → cierre limpio (gather con return_exceptions).
 
-**PENDIENTE para el apagado**: con el `raise`, una tarea que estaba ejecutando al
-apagar queda en `ejecutando` (nadie la marca) → el JSON mentiría.
+**(Resuelto en el apagado ordenado)**: con el `raise`, una tarea que estaba
+ejecutando al apagar quedaba en `ejecutando`. Ahora el apagado cancela primero el
+Task de cada ejecución (como el DELETE) y el worker la marca `cancelada`.
 
 ## hashear y el executor (medición 2)
 
@@ -286,6 +287,85 @@ Interpretación:
   no siempre es mejor → se limita con un Semaphore (bonus rate limiting).
   El sistema lo reportó como dato de esa URL, sin romper la tarea.
 
+## Backpressure
+
+`asyncio.Queue(maxsize=MAX_COLA)` (default 1000, variable de entorno). Con la cola
+llena el POST responde **503 + Retry-After** en vez de acumular sin límite
+(medición 3: ~1.7 KB por tarea, un millón ≈ 1.7 GB).
+- Se chequea `cola.full()` ANTES de crear la tarea: si no, quedaría `pendiente` en
+  el dict sin estar en la cola. Entre el `full()` y el `put_nowait()` no hay await
+  → nadie puede llenarla en el medio (mismo argumento que el contador sin Lock).
+- `put_nowait` y no `await put`: con la cola llena, `await put` suspende el POST y
+  el cliente queda COLGADO esperando lugar; los POST suspendidos se acumulan
+  (conexiones abiertas). El problema no desaparece, se muda.
+Verificado con MAX_COLA=3 y 1 worker: POST 1-4 → 202 (1 ejecutando + 3 en cola),
+5-6 → 503 "Cola llena", el dict tiene 4 (las rechazadas no quedan huérfanas), y
+a los 3 s se libera un lugar → 202.
+Limitación: una tarea cancelada estando pendiente sigue ocupando su lugar en la
+cola hasta que un worker la saca y la saltea.
+
+## /estadisticas
+
+Totales por estado, workers (total y ocupados = `len(en_ejecucion)`: cada worker
+ocupado tiene exactamente una ejecución en curso) y tiempos promedio, general y
+POR TIPO (un promedio que mezcla esperar de 1 s con hashear de 15 s no describe a
+ninguna). Los dos tiempos responden preguntas distintas: espera en cola = "¿me
+faltan workers?"; ejecución = "¿cuánto cuesta cada tarea?".
+Cada promedio usa solo las tareas donde el dato es válido:
+- espera en cola: toda tarea que ARRANCÓ (incluye fallidas y canceladas en ejecución:
+  esperaron igual). Las que nunca arrancaron no tienen `iniciada`.
+- ejecución: solo COMPLETADAS. Una fallida por timeout tiene los números, pero su
+  "ejecución" es el timeout: dice cuándo la cortamos, no cuánto cuesta.
+Verificado: 2 esperar de 1 s completadas + 1 con timeout 0.5 + 1 cancelada a los
+4 s → ejecución de esperar = 1.021 s (solo las dos completadas).
+
+## Medición 3: el techo del pool (`mediciones/medir_techo.py`)
+
+CPU: i5-8250U, 4 núcleos físicos × 2 hilos (hyperthreading) = 8 CPUs lógicas.
+Para cada N: servidor con N_WORKERS = N, N tareas iguales a la vez.
+
+**CPU-bound** (hashear 2M, ~2.4 s sola):
+
+| N             | 1     | 4     | 8     | 16    | 32     |
+|---------------|-------|-------|-------|-------|--------|
+| mi hipótesis  | 1.5   | 1.5   | 1.5   | 3     | 4.5    |
+| total medido  | 2.4 s | 2.7 s | 4.1 s | 8.0 s | 14.0 s |
+| GET /stats    | 27 ms | 5 ms  | 22 ms | 7 ms  | 6 ms   |
+
+- Plano hasta 4, sube ya en 8: el techo son los 4 NÚCLEOS FÍSICOS. Los 2 hilos de un
+  núcleo comparten sus unidades de cálculo y caché: corren a la vez pero compiten.
+  Para hash (cálculo puro) el hyperthreading aportó ~17% (8 tareas: 4.1 s en vez de
+  2 tandas × 2.4 = 4.8 s). Desde ahí, crecimiento LINEAL: el doble de tareas, ~el
+  doble de tiempo (no exponencial).
+- La API nunca se degradó (GET en ms): el CPU-bound corre en otros procesos.
+  (Mi hipótesis falló en el codo — supuse 8 — y en la cuenta de 32: son 4 tandas.)
+- **Punto ciego de la métrica**: con N=32 hay 32 workers → nadie espera en NUESTRA
+  cola, pero la "ejecución" promedio dio 8.7 s para un hash de 2.4 s. El trabajo
+  esperó en la cola INTERNA del ProcessPoolExecutor (8 procesos). Nuestro tiempo de
+  ejecución arranca cuando el worker la toma, así que incluye esa espera: con más
+  workers que procesos, la espera se muda de la cola que medimos a una que no.
+
+**I/O-bound** (esperar 1 s):
+
+| N                  | 10     | 100    | 1.000  | 10.000 |
+|--------------------|--------|--------|--------|--------|
+| ejecución promedio | 1.00 s | 1.01 s | 1.00 s | 1.01 s |
+| total              | 1.0 s  | 1.3 s  | 1.9 s  | 9.3 s  |
+| envío de los POST  | 0.05 s | 0.28 s | 0.95 s | 8.3 s  |
+| memoria servidor   | 47 MB  | 48 MB  | 51 MB  | 76 MB  |
+
+- El event loop NO se rompió con 10.000 corrutinas durmiendo: cada una sigue
+  tardando 1.01 s y el GET responde en 14 ms.
+- Lo primero que se satura es la ENTRADA de la API: recibir 10.000 POST (parsear
+  HTTP, validar con Pydantic, responder) en un solo hilo = 8.3 s (~1.200 req/s).
+- Memoria: +17 MB por 10.000 tareas ≈ 1.7 KB cada una. Poco con 10.000; con
+  1 millón ≈ 1.7 GB. (Mi primera lectura fue "limitó la memoria": los números
+  dicen que fue el envío.)
+- **"¿Qué se rompe con 10.000 de golpe?"**: con N workers, nada; con los 4 por
+  defecto, se acumulan en una cola SIN LÍMITE y en un dict `tareas` que nunca se
+  vacía (ni las completadas) → memoria creciendo sin freno. Solución: backpressure
+  (`asyncio.Queue(maxsize=N)` + 503 cuando está llena) y purgar tareas viejas.
+
 ## Apagado ordenado (diseño)
 
 Docker manda SIGTERM, espera 10 s y manda SIGKILL. SIGKILL mata el proceso entero:
@@ -326,9 +406,19 @@ línea como signal.signal): puede crear tasks sin problema.
    marca `cancelada` → ninguna queda `ejecutando` en el JSON (resuelve el pendiente)
 5. cancelar los workers (ya ociosos) y cerrar el pool
 6. volcar `estado_<timestamp>.json`
-7. `servidor.should_exit = True` → recién ahí uvicorn deja de escuchar y sale
-Para tener `servidor`, el __main__ usa `uvicorn.Server(Config(...))` en vez de
-`uvicorn.run()`. Una segunda señal durante el apagado se ignora (se loguea).
+7. le pasamos la señal al handler de uvicorn que habíamos pisado → recién ahí
+   uvicorn deja de escuchar y sale
+Una segunda señal durante el apagado se ignora (se loguea).
+
+**BUG encontrado al escribir el README: con `uvicorn main:app` no se apagaba nunca.**
+La primera versión hacía `servidor.should_exit = True`, con `servidor` creado en el
+`__main__`. Con el CLI de uvicorn, `servidor` era None: volcaba el JSON y quedaba
+vivo; y un segundo Ctrl+C se ignoraba ("ya en curso") → solo con kill -9.
+Arreglo: antes de instalar los nuestros, guardar los de uvicorn con
+`signal.getsignal(sig)` y llamarlo al final del apagado (es el que pone
+`should_exit`). Verificado: `python main.py` y `uvicorn main:app` con SIGINT y
+SIGTERM, y `uvicorn --reload` con Ctrl+C al grupo de procesos: todos terminan
+esperando la tarea en curso (~2 s) y vuelcan. Docker: `stop` 8.88 s.
 
 **Volumen** `./datos:/app/datos`: el JSON se escribe en una carpeta del HOST montada
 en el contenedor. `docker compose down` borra el contenedor (y su sistema de
