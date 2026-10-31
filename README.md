@@ -17,6 +17,5 @@
 
 | Componente | Estado |
 |------------|--------|
-| Bloque 0   | Pendiente |
-| TP1        | Pendiente |
-| TP2        | Pendiente |
+| TP1        | Aprobado |
+| TP2        | Entregado |

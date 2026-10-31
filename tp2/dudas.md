@@ -2,18 +2,15 @@
 
 ## Para repasar al empezar la próxima sesión
 
-- [ ] `put_nowait` vs `await put` con la cola llena: 503 inmediato o el cliente colgado
-- [ ] Chequear `cola.full()` ANTES de crear la tarea (y por qué no hace falta Lock hasta el put_nowait)
-- [ ] `signal.getsignal()`: guardar el handler que pisamos para devolverle la señal al final
+(nada pendiente: TP terminado. Para estudiar, ver la lista de abajo y notas.md)
 
 ## Para el próximo bloque
 
-- Revisar el borrador del README y escribir la sección 7 ("Lo que aprendí")
-- Limpieza final (código, notas.md, README raíz del repo) + prueba completa en Docker
 - Bonus si sobra tiempo: tests con pytest-asyncio (cancelación)
 
 ### Repasados
 
+- [x] (31/10) put_nowait vs await put, full() antes de crear la tarea, signal.getsignal()
 - [x] (30/10 tarde) tres estados de una señal, un handler por señal (el último gana),
       backpressure con put_nowait vs await put
 - [x] Sólidos sin repaso (sesión 30/10): promedios de /estadisticas, hyperthreading y
@@ -51,4 +48,5 @@
   → el `async with` del cliente la cierra; verificado con `ss` (2 → 0 conexiones)
 - ~~¿Usamos los handlers de señales de uvicorn o los nuestros?~~ → los nuestros (503)
 - ~~Cliente HTTP para `descargar`: ¿`httpx` o `aiohttp`?~~ → httpx (ver notas.md)
-- ¿`extra='forbid'` en los modelos para rechazar campos que sobran, o dejarlos pasar?
+- ~~¿`extra='forbid'` para rechazar campos que sobran?~~ → se dejan pasar (se ignoran);
+  documentado como limitación en el README

@@ -398,4 +398,30 @@ notas.md, "Apagado ordenado (implementación)".
 
 ## 7. Lo que aprendí
 
-> *Pendiente: lo escribo yo.*
+Lo que aprendí en este TP fue cómo funciona un servidor asíncrono que atiende varios
+clientes concurrentes en un solo hilo sin bloquear el event loop. También entendí
+cómo se distribuye el trabajo entre workers, y me ayudó a entender la diferencia
+entre concurrencia real y la secuencial. También me ayudó a entender cómo se ejecuta
+cada tipo de tarea y por qué para hashear se manda a un ProcessPoolExecutor.
+
+Hicimos mediciones en lugar de suponer: primero planteaba una hipótesis y después la
+probábamos. Por ejemplo, en la segunda medición yo creía que los threads tardarían lo
+mismo que la versión secuencial, pero terminaron tardando más del doble, porque el GIL
+no solo serializa la ejecución sino que además hay un costo de tiempo por cada
+traspaso entre hilos. O al medir el techo del pool, yo creía que el tiempo total iba a
+ser el mismo con 1, 4 y 8 tareas de hashear porque mi computadora tiene 8 núcleos,
+pero después de medir vimos que el tiempo empieza a subir con 8 tareas, porque en
+realidad mi computadora tiene 4 núcleos físicos.
+
+También este TP me sirvió para mejorar mi uso de agentes de IA. En el TP1 usé el tutor
+de IA con Claude del navegador, no un agente: me sirvió para hacer el TP, pero siempre
+le tenía que estar mandando los resultados de la terminal o los bugs que aparecían, y
+también los archivos de clases anteriores, la consigna y el prompt del tutor por el
+chat. Ahora, usando un agente, he podido ahorrar más tiempo al subir todo el contenido
+necesario al repo, y no le tenía que mandar los resultados de la terminal ni los bugs
+que aparecían, porque los podía ver él mismo. El uso de IA en este TP fue de la
+siguiente manera: dividimos el TP en sesiones y cada día hacía una o dos. Al principio
+de cada una repasábamos los conceptos de la sesión anterior; luego desarrollábamos el
+código, donde yo (con ayuda del tutor) tomaba las decisiones de diseño; después el
+tutor me hacía preguntas para asentar lo hecho, y la sesión terminaba repasando los
+conceptos vistos y definiendo qué se iba a repasar en la próxima.
